@@ -1,0 +1,45 @@
+networks:
+  web:
+    external: true
+    name: homelab-web
+
+services:
+  jobkit-api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: jobkit-api
+    restart: unless-stopped
+    networks:
+      - web
+    ports:
+      - "8122:8000"
+    env_file:
+      - .env
+    volumes:
+      - ./data:/app/data
+      - ./jobs:/app/jobs
+      - ./outputs:/app/outputs
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  jobkit-frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: jobkit-frontend
+    restart: unless-stopped
+    networks:
+      - web
+    ports:
+      - "8123:3000"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:3000"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
