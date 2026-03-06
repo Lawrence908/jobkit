@@ -1,0 +1,367 @@
+/* JobKit — design system */
+:root {
+  /* Typography */
+  --font-display: "Syne", system-ui, sans-serif;
+  --font-body: "DM Sans", system-ui, sans-serif;
+
+  /* Dark theme (default) */
+  --bg-base: #0c0c0e;
+  --bg-elevated: #141416;
+  --bg-card: #1a1a1d;
+  --bg-input: #121214;
+  --border-subtle: rgba(255, 255, 255, 0.06);
+  --border-muted: rgba(255, 255, 255, 0.1);
+  --border-strong: rgba(255, 255, 255, 0.14);
+  --text-primary: #f4f4f5;
+  --text-secondary: #a1a1aa;
+  --text-muted: #71717a;
+  --accent: #f59e0b;
+  --accent-hover: #fbbf24;
+  --accent-muted: rgba(245, 158, 11, 0.12);
+  --accent-subtle: rgba(245, 158, 11, 0.06);
+  --success: #22c55e;
+  --error: #ef4444;
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-xl: 18px;
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.2);
+  --shadow-card-hover: 0 8px 24px rgba(0, 0, 0, 0.35);
+  --focus-ring: 0 0 0 2px var(--bg-base), 0 0 0 4px var(--accent);
+  --transition-fast: 0.15s ease;
+  --transition-normal: 0.2s ease;
+}
+
+[data-mantine-color-scheme="light"] {
+  --bg-base: #fafaf9;
+  --bg-elevated: #ffffff;
+  --bg-card: #ffffff;
+  --bg-input: #f4f4f5;
+  --border-subtle: rgba(0, 0, 0, 0.06);
+  --border-muted: rgba(0, 0, 0, 0.1);
+  --border-strong: rgba(0, 0, 0, 0.14);
+  --text-primary: #18181b;
+  --text-secondary: #52525b;
+  --text-muted: #71717a;
+  --accent-muted: rgba(245, 158, 11, 0.12);
+  --accent-subtle: rgba(245, 158, 11, 0.06);
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.05);
+  --shadow-card-hover: 0 8px 24px rgba(0, 0, 0, 0.1);
+  --focus-ring: 0 0 0 2px var(--bg-base), 0 0 0 4px var(--accent);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-body);
+  font-size: 15px;
+  line-height: 1.5;
+  background-color: var(--bg-base);
+  color: var(--text-primary);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+/* Display font for headings and brand */
+.font-display {
+  font-family: var(--font-display);
+  letter-spacing: -0.02em;
+}
+
+/* ——— Mantine overrides (dark inputs, consistent borders) ——— */
+[data-mantine-color-scheme="dark"] .mantine-TextInput-input,
+[data-mantine-color-scheme="dark"] .mantine-Textarea-input,
+[data-mantine-color-scheme="dark"] .mantine-Select-input,
+[data-mantine-color-scheme="dark"] .mantine-PasswordInput-input {
+  background-color: var(--bg-input) !important;
+  border-color: var(--border-muted) !important;
+  color: var(--text-primary) !important;
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+[data-mantine-color-scheme="dark"] .mantine-TextInput-input:focus,
+[data-mantine-color-scheme="dark"] .mantine-Textarea-input:focus,
+[data-mantine-color-scheme="dark"] .mantine-Select-input:focus,
+[data-mantine-color-scheme="dark"] .mantine-PasswordInput-input:focus {
+  border-color: var(--accent) !important;
+  box-shadow: 0 0 0 1px var(--accent) !important;
+}
+
+[data-mantine-color-scheme="dark"] .mantine-TextInput-input::placeholder,
+[data-mantine-color-scheme="dark"] .mantine-Textarea-input::placeholder {
+  color: var(--text-muted);
+}
+
+/* Select: input and dropdown chevron size */
+.mantine-Select-input {
+  padding-right: 2rem;
+}
+
+.mantine-Select-section {
+  width: 1.25rem;
+}
+
+.mantine-Select-section svg {
+  width: 0.875rem;
+  height: 0.875rem;
+}
+
+.mantine-Select-dropdown {
+  background-color: var(--bg-elevated) !important;
+  border: 1px solid var(--border-muted);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-card-hover);
+}
+
+.mantine-Select-option[data-combobox-selected],
+.mantine-Select-option:hover {
+  background-color: var(--accent-subtle) !important;
+}
+
+/* Buttons: subtle and light variants use our tokens */
+[data-mantine-color-scheme="dark"] .mantine-Button-root:not([data-variant="filled"]) {
+  border-color: var(--border-muted);
+}
+
+[data-mantine-color-scheme="dark"] .mantine-Button-root[data-variant="subtle"]:hover {
+  background-color: var(--accent-subtle);
+  color: var(--text-primary);
+}
+
+[data-mantine-color-scheme="dark"] .mantine-Button-root[data-color="dark"] {
+  color: var(--text-secondary);
+}
+
+[data-mantine-color-scheme="dark"] .mantine-Button-root[data-color="dark"]:hover {
+  color: var(--text-primary);
+  background-color: var(--accent-subtle);
+}
+
+/* Paper / Card */
+[data-mantine-color-scheme="dark"] .mantine-Paper-root {
+  background-color: var(--bg-card);
+  border-color: var(--border-subtle);
+}
+
+/* Alerts */
+[data-mantine-color-scheme="dark"] .mantine-Alert-root {
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-muted);
+}
+
+/* Badge */
+[data-mantine-color-scheme="dark"] .mantine-Badge-root[data-variant="outline"] {
+  border-color: var(--border-muted);
+}
+
+/* Loader */
+.mantine-Loader-root {
+  color: var(--accent);
+}
+
+/* Links inside content */
+a[href]:not([class*="mantine"]) {
+  color: var(--accent);
+  text-decoration: none;
+  transition: color var(--transition-fast);
+}
+
+a[href]:not([class*="mantine"]):hover {
+  color: var(--accent-hover);
+  text-decoration: underline;
+}
+
+/* Button rendered as Link: keep button appearance, not default link style */
+.mantine-Button-root[href] {
+  text-decoration: none;
+  color: inherit;
+}
+
+.mantine-Button-root[href]:hover {
+  text-decoration: none;
+  color: inherit;
+}
+
+/* ——— Job card hover ——— */
+.job-card-hover {
+  transition: box-shadow var(--transition-normal), transform var(--transition-normal);
+}
+
+.job-card-hover:hover {
+  box-shadow: var(--shadow-card-hover);
+  transform: translateY(-2px);
+}
+
+/* ——— Login page: full-screen centering + card ——— */
+.login-page {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem 1.5rem;
+  background: var(--bg-base);
+}
+
+.login-page .login-page__container {
+  width: 100%;
+  max-width: 24rem;
+  margin: 0 auto;
+}
+
+.login-page .login-page__card {
+  padding: 2rem !important;
+  border-radius: var(--radius-lg) !important;
+  border: 1px solid var(--border-subtle) !important;
+  background-color: var(--bg-card) !important;
+  box-shadow: var(--shadow-card-hover);
+}
+
+/* ——— Login page: force dark inputs/button (high specificity, no scheme dependency) ——— */
+.login-page .mantine-TextInput-input,
+.login-page .mantine-PasswordInput-input,
+.login-page input[type="text"],
+.login-page input[type="password"] {
+  background-color: var(--bg-input) !important;
+  border-color: var(--border-muted) !important;
+  border-width: 1px !important;
+  color: var(--text-primary) !important;
+}
+
+.login-page .mantine-TextInput-input:focus,
+.login-page .mantine-PasswordInput-input:focus,
+.login-page input[type="text"]:focus,
+.login-page input[type="password"]:focus {
+  border-color: var(--accent) !important;
+  box-shadow: 0 0 0 1px var(--accent) !important;
+  outline: none !important;
+}
+
+.login-page .mantine-TextInput-input::placeholder,
+.login-page .mantine-PasswordInput-input::placeholder {
+  color: var(--text-muted) !important;
+}
+
+.login-page .mantine-Paper-root {
+  background-color: var(--bg-card) !important;
+  border-color: var(--border-subtle) !important;
+}
+
+.login-page .mantine-Button-root[data-variant="filled"],
+.login-page button[type="submit"] {
+  background-color: var(--accent) !important;
+  color: #0c0c0e !important;
+  border: none !important;
+}
+
+.login-page .mantine-Button-root[data-variant="filled"]:hover,
+.login-page button[type="submit"]:hover {
+  background-color: var(--accent-hover) !important;
+  color: #0c0c0e !important;
+}
+
+.login-page .mantine-InputWrapper-label,
+.login-page .mantine-TextInput-label,
+.login-page .mantine-PasswordInput-label {
+  color: var(--text-primary) !important;
+}
+
+/* ——— New Job page: same input/textarea styling ——— */
+.new-job-page .mantine-TextInput-input,
+.new-job-page .mantine-Textarea-input {
+  background-color: var(--bg-input) !important;
+  border-color: var(--border-muted) !important;
+  color: var(--text-primary) !important;
+}
+
+.new-job-page .mantine-TextInput-input:focus,
+.new-job-page .mantine-Textarea-input:focus {
+  border-color: var(--accent) !important;
+  box-shadow: 0 0 0 1px var(--accent) !important;
+}
+
+.new-job-page .mantine-TextInput-input::placeholder,
+.new-job-page .mantine-Textarea-input::placeholder {
+  color: var(--text-muted);
+}
+
+/* ——— Page container: consistent width, padding, centering ——— */
+.page-container {
+  width: 100%;
+  max-width: 100%;
+  margin: 0 auto;
+  padding: 0 1.5rem;
+}
+
+.page-container--narrow {
+  max-width: 36rem;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.page-container--content {
+  max-width: 64rem;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+/* Card / box styling for Papers */
+.app-card {
+  border-radius: var(--radius-lg) !important;
+  border: 1px solid var(--border-subtle) !important;
+  background-color: var(--bg-card) !important;
+  box-shadow: var(--shadow-card);
+}
+
+.app-card--elevated {
+  box-shadow: var(--shadow-card-hover);
+}
+
+/* Job list cards: clear separation from background and from each other */
+.job-card {
+  border-radius: var(--radius-lg) !important;
+  border: 1px solid var(--border-muted) !important;
+  background-color: var(--bg-card) !important;
+  box-shadow: var(--shadow-card);
+  transition: box-shadow var(--transition-normal), transform var(--transition-normal), border-color var(--transition-fast);
+}
+
+.job-card:hover {
+  box-shadow: var(--shadow-card-hover);
+  transform: translateY(-2px);
+  border-color: var(--border-strong) !important;
+}
+
+/* Force Mantine Card to respect job-card styles (it may use internal bg) */
+.mantine-Card-root.job-card {
+  background-color: var(--bg-card) !important;
+  border-color: var(--border-muted) !important;
+}
+
+/* ——— App shell main content ——— */
+.mantine-AppShell-main {
+  padding-top: 1.5rem !important;
+  padding-bottom: 2rem !important;
+}
+
+/* Header inner: align with page container padding */
+.app-header-inner {
+  width: 100%;
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 0 1.5rem;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
