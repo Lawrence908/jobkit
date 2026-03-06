@@ -1,0 +1,22 @@
+@page {
+  size: letter;
+  margin: 0.75in;
+}
+
+body {
+  font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+  font-size: 11pt;
+  line-height: 1.4;
+  color: #222;
+  max-width: 100%;
+}
+
+h1 { font-size: 18pt; margin-bottom: 0.25em; border-bottom: 1px solid #ccc; }
+h2 { font-size: 13pt; margin-top: 1em; margin-bottom: 0.3em; }
+h3 { font-size: 11pt; margin-top: 0.6em; margin-bottom: 0.2em; }
+
+p { margin: 0.4em 0; }
+ul { margin: 0.3em 0; padding-left: 1.4em; }
+li { margin: 0.2em 0; }
+
+strong { font-weight: 600; }

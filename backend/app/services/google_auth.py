@@ -1,0 +1,80 @@
+"""Google OAuth 2.0 flow and token storage."""
+import logging
+from urllib.parse import urlencode
+
+from google_auth_oauthlib.flow import Flow
+from google.oauth2.credentials import Credentials
+
+from app.core.config import get_settings
+from app.core.crypto import decrypt_refresh_token, encrypt_refresh_token
+from app.db.models import GoogleToken
+
+logger = logging.getLogger(__name__)
+
+SCOPES = [
+    "https://www.googleapis.com/auth/drive.file",
+    "https://www.googleapis.com/auth/spreadsheets",
+]
+
+
+def get_flow():
+    settings = get_settings()
+    return Flow.from_client_config(
+        {
+            "web": {
+                "client_id": settings.google_oauth_client_id,
+                "client_secret": settings.google_oauth_client_secret,
+                "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+                "token_uri": "https://oauth2.googleapis.com/token",
+                "redirect_uris": [settings.google_oauth_redirect_uri],
+            }
+        },
+        scopes=SCOPES,
+        redirect_uri=settings.google_oauth_redirect_uri,
+        autogenerate_code_verifier=False,
+    )
+
+
+def auth_url() -> str:
+    flow = get_flow()
+    auth_url, _ = flow.authorization_url(access_type="offline", prompt="consent")
+    return auth_url
+
+
+def exchange_code(code: str) -> tuple[Credentials, str]:
+    flow = get_flow()
+    flow.fetch_token(code=code)
+    creds = flow.credentials
+    refresh = creds.refresh_token or ""
+    return creds, refresh
+
+
+def save_refresh_token(db, refresh_token: str) -> None:
+    settings = get_settings()
+    encrypted = encrypt_refresh_token(refresh_token, settings.google_token_encryption_key)
+    existing = db.query(GoogleToken).filter(GoogleToken.provider == "google").first()
+    if existing:
+        existing.encrypted_refresh_token = encrypted
+        existing.scopes = ",".join(SCOPES)
+        db.add(existing)
+    else:
+        db.add(GoogleToken(provider="google", encrypted_refresh_token=encrypted, scopes=",".join(SCOPES)))
+    db.commit()
+
+
+def get_credentials(db):
+    row = db.query(GoogleToken).filter(GoogleToken.provider == "google").first()
+    if not row:
+        return None
+    settings = get_settings()
+    refresh = decrypt_refresh_token(row.encrypted_refresh_token, settings.google_token_encryption_key)
+    if not refresh:
+        return None
+    return Credentials(
+        token=None,
+        refresh_token=refresh,
+        token_uri="https://oauth2.googleapis.com/token",
+        client_id=settings.google_oauth_client_id,
+        client_secret=settings.google_oauth_client_secret,
+        scopes=SCOPES,
+    )
