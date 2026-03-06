@@ -1,0 +1,13 @@
+# Sample project for JobKit tailoring. Copy and edit for your real projects.
+name: Sample Project
+description: A short description of the project.
+tags:
+  - python
+  - api
+tech_stack:
+  - FastAPI
+  - SQLite
+bullets:
+  - Delivered feature X with metric Y.
+  - Collaborated with team on Z.
+dates: "2024–present"

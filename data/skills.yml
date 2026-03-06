@@ -1,0 +1,4 @@
+# Optional: categorized skills for matching
+# items: [ Python, JavaScript, ... ]
+# or categories: { backend: [...], frontend: [...] }
+items: []

@@ -1,0 +1,23 @@
+# JobKit - add this block to services/daedalus-infra/proxy/Caddyfile
+# jobs.chrislawrence.ca:80 {
+#     handle /api/* {
+#         reverse_proxy jobkit-api:8000 {
+#             header_up Host {host}
+#             header_up X-Real-IP {remote}
+#         }
+#     }
+#     handle {
+#         reverse_proxy jobkit-frontend:3000 {
+#             header_up Host {host}
+#             header_up X-Real-IP {remote}
+#         }
+#     }
+#     log {
+#         level INFO
+#         format json
+#         output file /data/logs/jobkit.json {
+#             roll_size 15mb
+#             roll_keep 8
+#         }
+#     }
+# }
