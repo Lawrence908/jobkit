@@ -13,7 +13,7 @@ from app.core.auth import get_current_user, verify_csrf
 from app.core.config import get_settings
 from app.db.session import get_db
 from app.db.models import Job, Artifact, GoogleToken
-from app.services.tailor import generate_artifacts, write_generated_artifacts
+from app.services.tailor import generate_artifacts, write_generated_artifacts, select_projects
 from app.services.render import render_job_pdfs
 from app.services.google_auth import get_credentials
 from app.services.google_drive import upload_file, ensure_folder
@@ -62,6 +62,75 @@ def _load_job_json(job: Job) -> dict:
     if not json_path.exists():
         raise HTTPException(status_code=400, detail="Job data not found on disk")
     return json.loads(json_path.read_text(encoding="utf-8"))
+
+
+def _generated_dir(job: Job) -> Path:
+    return ensure_safe_relative_path(get_settings().jobkit_jobs_dir, job.slug, "generated")
+
+
+_GENERATED_FILES = ("resume", "cover_letter", "notes")  # keys; files are resume.md, cover_letter.md, notes.md
+
+
+@router.get("/{job_id}/generated")
+def get_generated(
+    job_id: int,
+    db: Annotated[Session, Depends(get_db)],
+    _: Annotated[str, Depends(get_current_user)],
+):
+    """Return raw markdown for generated resume, cover letter, and notes (null if file missing)."""
+    job = db.query(Job).filter(Job.id == job_id).first()
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    gen_dir = _generated_dir(job)
+    out = {}
+    for key in _GENERATED_FILES:
+        path = gen_dir / f"{key}.md"
+        out[key] = path.read_text(encoding="utf-8") if path.exists() else None
+    return out
+
+
+class GeneratedUpdateBody(BaseModel):
+    content: str
+
+
+@router.put("/{job_id}/generated/{doc_key}")
+def update_generated(
+    job_id: int,
+    doc_key: str,
+    data: GeneratedUpdateBody,
+    db: Annotated[Session, Depends(get_db)],
+    _: Annotated[str, Depends(get_current_user)],
+):
+    """Update one generated document (resume, cover_letter, or notes)."""
+    if doc_key not in _GENERATED_FILES:
+        raise HTTPException(status_code=400, detail="doc_key must be resume, cover_letter, or notes")
+    job = db.query(Job).filter(Job.id == job_id).first()
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    gen_dir = _generated_dir(job)
+    filename = "cover_letter.md" if doc_key == "cover_letter" else f"{doc_key}.md"
+    path = gen_dir / filename
+    gen_dir.mkdir(parents=True, exist_ok=True)
+    path.write_text(data.content, encoding="utf-8")
+    return {"ok": True, "doc": doc_key}
+
+
+@router.get("/{job_id}/tailor-preview")
+def tailor_preview(
+    job_id: int,
+    db: Annotated[Session, Depends(get_db)],
+    _: Annotated[str, Depends(get_current_user)],
+):
+    """Return keywords and which projects would be selected for tailoring (for UI preview)."""
+    job = db.query(Job).filter(Job.id == job_id).first()
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    keywords = job.keywords_json or []
+    selected = select_projects(keywords, "2 pages")  # show up to 6 projects
+    return {
+        "keywords": keywords,
+        "selected_projects": [{"name": p.get("name"), "description": (p.get("description") or "")[:120]} for p in selected],
+    }
 
 
 @router.post("/{job_id}/generate")

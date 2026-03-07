@@ -19,6 +19,30 @@ def get_header_row(service, spreadsheet_id: str, sheet_name: str) -> list[str]:
     return [str(c).strip() for c in row] if row else []
 
 
+def get_all_sheet_data(
+    service, spreadsheet_id: str, sheet_name: str, max_rows: int = 500
+) -> tuple[list[str], list[list[str]]]:
+    """
+    Return (headers, data_rows) for the configured sheet.
+    First row is headers; data_rows are the rest, padded to header length.
+    """
+    result = service.spreadsheets().values().get(
+        spreadsheetId=spreadsheet_id,
+        range=f"'{sheet_name}'!A1:ZZ{max_rows + 1}",
+    ).execute()
+    rows = result.get("values", [])
+    if not rows:
+        return [], []
+    headers = [str(c).strip() if c else "" for c in rows[0]]
+    data_rows = []
+    for row in rows[1:]:
+        padded = [str(c).strip() if c else "" for c in row]
+        while len(padded) < len(headers):
+            padded.append("")
+        data_rows.append(padded[: len(headers)])
+    return headers, data_rows
+
+
 def get_row(service, spreadsheet_id: str, sheet_name: str, row_index: int) -> list[str]:
     """Return one row (1-based row_index) as a list of strings; length matches header."""
     result = service.spreadsheets().values().get(

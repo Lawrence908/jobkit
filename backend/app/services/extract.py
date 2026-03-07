@@ -18,9 +18,11 @@ _STOPLIST = frozenset({
 _KNOWN_TECH = re.compile(
     r"\b(?:"
     r"python|java|javascript|typescript|react|sql|aws|docker|kubernetes|api|ml|machine learning|"
-    r"fastapi|django|flask|postgres|redis|linux|git|bash|c\+\+|android|aosp|"
+    r"fastapi|django|flask|postgres|postgresql|redis|linux|git|bash|c\+\+|android|aosp|"
     r"pytest|googletest|espresso|qualcomm|snapdragon|ci/cd|automation|"
-    r"hypervisor|kernel|embedded|can bus|ethernet|qxdm|qpst"
+    r"hypervisor|kernel|embedded|can bus|ethernet|qxdm|qpst|"
+    r"tailwind|weasyprint|sqlalchemy|alembic|tensorflow|keras|pytorch|next\.?js|"
+    r"oauth2|jwt|supabase|stripe|sendgrid|azure|gcp|cloudflare|nginx|caddy|weasyprint"
     r")\b",
     re.I,
 )

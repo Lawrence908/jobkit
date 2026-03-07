@@ -5,7 +5,7 @@ from pathlib import Path
 
 from app.core.config import get_settings
 from app.services.llm_provider import chat_completion
-from app.services.truth_store import get_projects, get_resume_base
+from app.services.truth_store import get_projects, get_resume_base, get_skills
 from app.services.profile_store import get_profile
 from app.utils.files import ensure_safe_relative_path
 
@@ -55,12 +55,14 @@ def generate_artifacts(
     """Generate resume.md, cover_letter.md, notes.md content via LLM. Returns (resume_md, cover_letter_md, notes_md)."""
     resume_base = get_resume_base()
     profile = get_profile()
+    skills = get_skills()
     selected = select_projects(job_json.get("keywords") or [], length)
     job_desc = (job_json.get("raw_body") or "")[:12000]
     ats = job_json.get("ats") or {}
     context = {
         "resume_base": resume_base,
         "profile": profile,
+        "skills": skills,
         "selected_projects": selected,
         "job": {
             "company": job_json.get("company"),
@@ -73,7 +75,7 @@ def generate_artifacts(
         "length": length,
     }
     context_str = json.dumps(context, indent=2)[:15000]
-    system = """You are a resume and cover letter writer. You must ONLY use facts from the provided resume_base and selected_projects. Do not invent employers, dates, or metrics. Any number or claim must appear in the source data. Output valid markdown. Be concise for 1 page, more detailed for 2 pages.
+    system = """You are a resume and cover letter writer. You must ONLY use facts from the provided resume_base, selected_projects, and (if present) skills. Do not invent employers, dates, or metrics. Any number or claim must appear in the source data. Use the skills data to align technical wording with the job where it matches the candidate's real experience. Output valid markdown. Be concise for 1 page, more detailed for 2 pages.
 When a "profile" object is provided, use its name, email, phone, linkedin for contact and any "pitch" text where appropriate in the cover letter.
 When an "ats" object is provided, use it to improve ATS (applicant tracking system) match: mirror the listed action_verbs in bullet points where accurate, weave in key_phrases from the job where they fit your real experience, and align wording with education/years_experience when true. Do not lie; only use ATS signals that genuinely apply to the candidate's background."""
 

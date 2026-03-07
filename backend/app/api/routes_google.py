@@ -1,15 +1,17 @@
-"""Google OAuth."""
+"""Google OAuth and sheet data."""
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import RedirectResponse
+from googleapiclient.discovery import build
 from sqlalchemy.orm import Session
 
 from app.core.auth import get_current_user
 from app.core.config import get_settings
 from app.db.session import get_db
 from app.db.models import GoogleToken
-from app.services.google_auth import auth_url, exchange_code, save_refresh_token
+from app.services.google_auth import auth_url, exchange_code, get_credentials, save_refresh_token
+from app.services.google_sheets import get_all_sheet_data
 
 router = APIRouter(prefix="/api/google", tags=["google"])
 
@@ -49,3 +51,33 @@ def oauth_callback(
     save_refresh_token(db, refresh)
     settings = get_settings()
     return RedirectResponse(url=settings.app_url.rstrip("/") + "/")
+
+
+@router.get("/sheet")
+def get_sheet_data(
+    db: Annotated[Session, Depends(get_db)],
+    _: Annotated[str, Depends(get_current_user)],
+):
+    """Return the configured Google Sheet tab as JSON (headers + rows) for in-app display."""
+    settings = get_settings()
+    if not settings.google_sheets_spreadsheet_id or not settings.google_sheets_tab_name:
+        raise HTTPException(status_code=400, detail="Google Sheet not configured")
+    row = db.query(GoogleToken).filter(GoogleToken.provider == "google").first()
+    if not row:
+        raise HTTPException(status_code=403, detail="Google not connected")
+    creds = get_credentials(db)
+    if not creds:
+        raise HTTPException(status_code=403, detail="Google credentials unavailable")
+    service = build("sheets", "v4", credentials=creds)
+    headers, rows = get_all_sheet_data(
+        service,
+        settings.google_sheets_spreadsheet_id,
+        settings.google_sheets_tab_name,
+    )
+    spreadsheet_url = f"https://docs.google.com/spreadsheets/d/{settings.google_sheets_spreadsheet_id}/edit"
+    return {
+        "spreadsheet_url": spreadsheet_url,
+        "sheet_name": settings.google_sheets_tab_name,
+        "headers": headers,
+        "rows": rows,
+    }
