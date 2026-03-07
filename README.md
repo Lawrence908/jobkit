@@ -5,7 +5,7 @@ Self-hosted web app for scraping job descriptions, tailoring resumes with an LLM
 ## Features
 
 - **Job ingestion**: Paste a job URL or raw description; store as markdown + JSON.
-- **Truth store**: Master resume and projects in `data/resume_base.yml` and `data/projects/*.yml`.
+- **Truth store**: Master resume, skills, and projects in `data/resume_base.yml`, `data/skills.yml`, and `data/projects/*.yml`.
 - **Tailoring**: Heuristic match + LLM refinement to generate resume, cover letter, and notes (no hallucinated facts).
 - **PDF**: WeasyPrint renders Markdown → PDF with a clean template.
 - **Google**: OAuth for Drive + Sheets; upload artifacts and append/update a tracker row.
@@ -55,6 +55,27 @@ For full instructions (OAuth consent screen, APIs, Drive folder ID, Sheets sprea
 ## Environment variables
 
 See `.env.example` for the full list. Required for basic run: `SESSION_SECRET`, `ADMIN_USERNAME`, `ADMIN_PASSWORD`. For generation: `LLM_API_KEY`. For Drive/Sheets: all `GOOGLE_*` variables.
+
+## Data and reference material
+
+JobKit uses **YAML** for tailoring so it can do heuristic project matching and pass structured data to the LLM. The app loads:
+
+| File / folder | Purpose |
+|---------------|--------|
+| `data/profile.yml` | Name, email, phone, LinkedIn, default tone/length/focus, **pitch** (used in cover letters). |
+| `data/resume_base.yml` | Contact, summary, highlights, technical snapshot, experience, education, certifications. |
+| `data/skills.yml` | Categorized or flat skills; used for keyword matching and to align resume/cover letter wording with the job. |
+| `data/projects/*.yml` | One project per file (or one file with a list). Each: `name`, `description`, `tags`, `tech_stack`, `bullets`, optional `dates`/`link`/`status`. |
+
+The markdown files in `data/projects/` (`resume.md`, `skills.md`, `coursework.md`, `homelab.md`, `portfolio.md`) are **reference sources**. Edit them for narrative and detail; then update the corresponding YAML so JobKit stays in sync. Optional: add a small script or manual step to re-export from markdown → YAML when you change the reference docs.
+
+**Customization tips:**
+
+- **Resume/cover letter tone**: Set `default_tone` and `default_focus` in `profile.yml`; override per job in the UI if needed.
+- **Cover letter**: The **pitch** in `profile.yml` is injected where appropriate; keep it to one or two sentences.
+- **ATS**: If ingest extracts action verbs and key phrases into the job's `ats` field, the tailor uses them to phrase bullets (without inventing facts).
+- **Projects**: More projects in `data/projects/*.yml` give the tailor more to choose from; scoring picks the most relevant by tags/tech_stack vs job keywords.
+- **Coursework**: Use a project like `coursework.yml` for roles that value C/C++, data structures, or academic foundations so it can be selected when relevant.
 
 ## Demo mode
 
