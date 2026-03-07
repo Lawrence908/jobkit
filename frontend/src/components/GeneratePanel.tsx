@@ -1,6 +1,12 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button, Select, Stack, Alert, Group } from "@mantine/core";
 import { api } from "../api/client";
+
+interface ProfileDefaults {
+  default_tone: string;
+  default_focus: string;
+  default_length: string;
+}
 
 interface GeneratePanelProps {
   jobId: number;
@@ -14,6 +20,13 @@ export function GeneratePanel({ jobId }: GeneratePanelProps) {
   const [tone, setTone] = useState("neutral");
   const [focus, setFocus] = useState("full-stack");
   const [length, setLength] = useState("1 page");
+  useEffect(() => {
+    api.get<ProfileDefaults>("/api/profile").then((p) => {
+      if (p.default_tone && TONE_OPTIONS.includes(p.default_tone)) setTone(p.default_tone);
+      if (p.default_focus && FOCUS_OPTIONS.includes(p.default_focus)) setFocus(p.default_focus);
+      if (p.default_length && LENGTH_OPTIONS.includes(p.default_length)) setLength(p.default_length);
+    }).catch(() => {});
+  }, []);
   const [generating, setGenerating] = useState(false);
   const [rendering, setRendering] = useState(false);
   const [uploading, setUploading] = useState(false);

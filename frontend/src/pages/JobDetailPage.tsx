@@ -15,9 +15,14 @@ import {
 } from "@mantine/core";
 import { api } from "../api/client";
 import type { Job } from "../api/types";
-import { GeneratePanel } from "../components/GeneratePanel";
+import { ApplicationFlow } from "../components/ApplicationFlow";
 
 const STATUS_OPTIONS = ["New", "Tailored", "Applied", "Interviewing", "Rejected", "Offer"];
+
+interface TailorPreview {
+  keywords: string[];
+  selected_projects: { name: string; description: string }[];
+}
 
 export function JobDetailPage() {
   const { jobId } = useParams<{ jobId: string }>();
@@ -30,6 +35,7 @@ export function JobDetailPage() {
   const [location, setLocation] = useState("");
   const [saving, setSaving] = useState(false);
   const [saveMessage, setSaveMessage] = useState("");
+  const [tailorPreview, setTailorPreview] = useState<TailorPreview | null>(null);
 
   useEffect(() => {
     if (!jobId) return;
@@ -44,6 +50,11 @@ export function JobDetailPage() {
       })
       .catch((err) => setError(err instanceof Error ? err.message : "Failed to load job"))
       .finally(() => setLoading(false));
+  }, [jobId]);
+
+  useEffect(() => {
+    if (!jobId) return;
+    api.get<TailorPreview>(`/api/jobs/${jobId}/tailor-preview`).then(setTailorPreview).catch(() => setTailorPreview(null));
   }, [jobId]);
 
   const handleStatusChange = async (value: string | null) => {
@@ -171,11 +182,29 @@ export function JobDetailPage() {
         </Paper>
       )}
 
+      {tailorPreview && tailorPreview.selected_projects.length > 0 && (
+        <Paper className="app-card" p="md" withBorder radius="lg">
+          <Text size="sm" fw={600} mb="xs" className="font-display">
+            Projects we&apos;ll emphasize
+          </Text>
+          <Text size="xs" c="dimmed" mb="xs">
+            These projects will be included when you generate (by relevance to this job).
+          </Text>
+          <Group gap="xs">
+            {tailorPreview.selected_projects.map((p) => (
+              <Badge key={p.name} variant="outline" size="sm" color="amber">
+                {p.name}
+              </Badge>
+            ))}
+          </Group>
+        </Paper>
+      )}
+
       <Paper className="app-card" p="md" withBorder radius="lg">
-        <Text size="sm" fw={600} mb="sm" className="font-display">
-          Generate application
+        <Text size="sm" fw={600} mb="md" className="font-display">
+          Tailored application
         </Text>
-        <GeneratePanel jobId={Number(jobId)} />
+        <ApplicationFlow jobId={Number(jobId)} />
       </Paper>
     </Stack>
   );

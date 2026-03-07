@@ -1,8 +1,8 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Outlet } from "react-router-dom";
-import { AppShell, Button, Group, Title } from "@mantine/core";
+import { AppShell, Button, Group, Title, Tooltip } from "@mantine/core";
 import { Link, useNavigate } from "react-router-dom";
-import { IconLogout, IconUser } from "@tabler/icons-react";
+import { IconLogout, IconRefresh, IconTable, IconUser } from "@tabler/icons-react";
 import { api, refreshCsrfToken } from "../api/client";
 import { GoogleStatus } from "./GoogleStatus";
 import { HubFooter } from "./HubFooter";
@@ -11,10 +11,27 @@ const headerHeight = 56;
 
 export function Layout() {
   const navigate = useNavigate();
+  const [reloading, setReloading] = useState(false);
+  const [reloadMessage, setReloadMessage] = useState<string | null>(null);
 
   useEffect(() => {
     refreshCsrfToken().catch(() => {});
   }, []);
+
+  const handleReloadData = async () => {
+    setReloadMessage(null);
+    setReloading(true);
+    try {
+      const res = await api.post<{ ok: boolean; project_count?: number }>("/api/truth-store/reload");
+      setReloadMessage(res.project_count != null ? `Data reloaded (${res.project_count} projects).` : "Data reloaded.");
+      setTimeout(() => setReloadMessage(null), 3000);
+    } catch {
+      setReloadMessage("Reload failed");
+      setTimeout(() => setReloadMessage(null), 3000);
+    } finally {
+      setReloading(false);
+    }
+  };
 
   const handleLogout = async () => {
     await api.post("/api/auth/logout");
@@ -63,6 +80,28 @@ export function Layout() {
           </Title>
           <Group gap="sm" wrap="nowrap">
             <GoogleStatus />
+            <Tooltip label={reloadMessage ?? "Reload resume/projects data after editing YAML"} opened={reloadMessage !== null}>
+              <Button
+                variant="subtle"
+                color="dark"
+                leftSection={<IconRefresh size={16} />}
+                size="sm"
+                loading={reloading}
+                onClick={handleReloadData}
+              >
+                Reload data
+              </Button>
+            </Tooltip>
+            <Button
+              component={Link}
+              to="/tracker"
+              variant="subtle"
+              color="dark"
+              leftSection={<IconTable size={16} />}
+              size="sm"
+            >
+              Tracker
+            </Button>
             <Button
               component={Link}
               to="/profile"

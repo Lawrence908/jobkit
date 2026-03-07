@@ -8,6 +8,7 @@ import { DashboardPage } from "./pages/DashboardPage";
 import { NewJobPage } from "./pages/NewJobPage";
 import { JobDetailPage } from "./pages/JobDetailPage";
 import { ProfilePage } from "./pages/ProfilePage";
+import { SpreadsheetPage } from "./pages/SpreadsheetPage";
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const [allowed, setAllowed] = useState<boolean | null>(null);
@@ -42,6 +43,7 @@ export default function App() {
         <Route index element={<DashboardPage />} />
         <Route path="jobs/new" element={<NewJobPage />} />
         <Route path="jobs/:jobId" element={<JobDetailPage />} />
+        <Route path="tracker" element={<SpreadsheetPage />} />
         <Route path="profile" element={<ProfilePage />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
