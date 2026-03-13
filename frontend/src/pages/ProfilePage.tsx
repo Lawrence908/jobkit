@@ -19,6 +19,8 @@ export interface Profile {
   email: string;
   phone: string;
   linkedin: string;
+  website: string;
+  github: string;
   pitch: string;
   default_tone: string;
   default_focus: string;
@@ -55,6 +57,8 @@ export function ProfilePage() {
         email: profile.email,
         phone: profile.phone,
         linkedin: profile.linkedin,
+        website: profile.website,
+        github: profile.github,
         pitch: profile.pitch,
         default_tone: profile.default_tone,
         default_focus: profile.default_focus,
@@ -123,6 +127,18 @@ export function ProfilePage() {
             value={profile.linkedin}
             onChange={(e) => setProfile({ ...profile, linkedin: e.target.value })}
             placeholder="https://linkedin.com/in/..."
+          />
+          <TextInput
+            label="Website"
+            value={profile.website}
+            onChange={(e) => setProfile({ ...profile, website: e.target.value })}
+            placeholder="https://yoursite.com"
+          />
+          <TextInput
+            label="GitHub"
+            value={profile.github}
+            onChange={(e) => setProfile({ ...profile, github: e.target.value })}
+            placeholder="https://github.com/..."
           />
         </Stack>
       </Paper>

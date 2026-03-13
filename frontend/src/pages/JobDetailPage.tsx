@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useParams } from "react-router-dom";
+import { useParams, useNavigate } from "react-router-dom";
 import {
   Stack,
   Group,
@@ -8,10 +8,12 @@ import {
   Paper,
   Text,
   TextInput,
+  Textarea,
   Button,
   Loader,
   Center,
   Alert,
+  Modal,
 } from "@mantine/core";
 import { api } from "../api/client";
 import type { Job } from "../api/types";
@@ -26,6 +28,7 @@ interface TailorPreview {
 
 export function JobDetailPage() {
   const { jobId } = useParams<{ jobId: string }>();
+  const navigate = useNavigate();
   const [job, setJob] = useState<Job | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -36,6 +39,11 @@ export function JobDetailPage() {
   const [saving, setSaving] = useState(false);
   const [saveMessage, setSaveMessage] = useState("");
   const [tailorPreview, setTailorPreview] = useState<TailorPreview | null>(null);
+  const [rawBody, setRawBody] = useState("");
+  const [updatingDescription, setUpdatingDescription] = useState(false);
+  const [descriptionMessage, setDescriptionMessage] = useState("");
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     if (!jobId) return;
@@ -47,6 +55,7 @@ export function JobDetailPage() {
         setCompany(j.company ?? "");
         setRole(j.role ?? "");
         setLocation(j.location ?? "");
+        setRawBody(j.raw_body ?? "");
       })
       .catch((err) => setError(err instanceof Error ? err.message : "Failed to load job"))
       .finally(() => setLoading(false));
@@ -93,6 +102,40 @@ export function JobDetailPage() {
     }
   };
 
+  const updateDescription = async () => {
+    if (!jobId) return;
+    setUpdatingDescription(true);
+    setDescriptionMessage("");
+    try {
+      const updated = await api.post<Job>(`/api/jobs/${jobId}/update-description`, { raw_body: rawBody });
+      setJob(updated);
+      setRawBody(updated.raw_body ?? rawBody);
+      setDescriptionMessage("Description and keywords updated.");
+      setTimeout(() => setDescriptionMessage(""), 4000);
+      api.get<TailorPreview>(`/api/jobs/${jobId}/tailor-preview`).then(setTailorPreview).catch(() => setTailorPreview(null));
+    } catch (err) {
+      setDescriptionMessage(err instanceof Error ? err.message : "Update failed");
+      setTimeout(() => setDescriptionMessage(""), 5000);
+    } finally {
+      setUpdatingDescription(false);
+    }
+  };
+
+  const handleDeleteJob = async () => {
+    if (!jobId) return;
+    setDeleting(true);
+    try {
+      await api.delete(`/api/jobs/${jobId}`);
+      navigate("/", { replace: true });
+    } catch (err) {
+      setDescriptionMessage(err instanceof Error ? err.message : "Delete failed");
+      setTimeout(() => setDescriptionMessage(""), 5000);
+      setDeleteModalOpen(false);
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   if (loading) {
     return (
       <Center py="xl">
@@ -112,28 +155,26 @@ export function JobDetailPage() {
     <Stack gap="xl" style={{ width: "100%" }}>
       <Paper className="app-card" p="md" withBorder radius="lg">
         <Stack gap="md">
-          <Group justify="space-between" wrap="wrap" align="flex-end" gap="md">
-            <Text size="sm" fw={600} className="font-display">
-              Job details
-            </Text>
-            <Group align="flex-end" gap="sm">
-              <Select
-                label="Status"
-                data={STATUS_OPTIONS}
-                value={status}
-                onChange={handleStatusChange}
-                disabled={saving}
-                style={{ minWidth: 160 }}
-              />
-              <Button onClick={() => saveJob()} loading={saving} color="amber" size="sm">
-                Save job
-              </Button>
-              {saveMessage && (
-                <Text size="sm" c="dimmed" mb={4}>
-                  {saveMessage}
-                </Text>
-              )}
-            </Group>
+          <Text size="sm" fw={600} className="font-display" style={{ flexShrink: 0 }}>
+            Job details
+          </Text>
+          <Group align="flex-end" gap="sm" wrap="wrap">
+            <Select
+              label="Status"
+              data={STATUS_OPTIONS}
+              value={status}
+              onChange={handleStatusChange}
+              disabled={saving}
+              style={{ minWidth: 160 }}
+            />
+            <Button onClick={() => saveJob()} loading={saving} color="amber" size="sm">
+              Save job
+            </Button>
+            {saveMessage && (
+              <Text size="sm" c="dimmed" mb={4}>
+                {saveMessage}
+              </Text>
+            )}
           </Group>
           <TextInput
             label="Company"
@@ -164,8 +205,80 @@ export function JobDetailPage() {
           <Text size="sm">
             <strong>Source:</strong> {job.source || "—"}
           </Text>
+          {job.description_word_count !== undefined && (
+            <>
+              <Text size="sm">
+                <strong>Description parsed:</strong> {job.description_word_count} words
+                {job.description_word_count < 80 && job.source === "url" && (
+                  <Text component="span" size="xs" c="dimmed" ml="xs">
+                    (may be incomplete)
+                  </Text>
+                )}
+              </Text>
+              {job.description_word_count < 80 && job.source === "url" && (
+                <Text size="xs" c="dimmed">
+                  If keywords look limited to the title, the page may not have been fully parsed. Add the job again via
+                  New Job using pasted description for better keywords.
+                </Text>
+              )}
+            </>
+          )}
+          <Textarea
+            label="Job description"
+            description="Paste or edit the full description; click Update to refresh keywords."
+            placeholder="Paste the full job description from the posting..."
+            value={rawBody}
+            onChange={(e) => setRawBody(e.currentTarget.value)}
+            minRows={6}
+            autosize
+            maxRows={20}
+          />
+          <Group gap="sm">
+            <Button
+              variant="light"
+              color="amber"
+              size="sm"
+              onClick={updateDescription}
+              loading={updatingDescription}
+            >
+              Update description
+            </Button>
+            {descriptionMessage && (
+              <Text size="sm" c="dimmed">
+                {descriptionMessage}
+              </Text>
+            )}
+          </Group>
+          <Button
+            variant="subtle"
+            color="red"
+            size="sm"
+            onClick={() => setDeleteModalOpen(true)}
+            style={{ alignSelf: "flex-start" }}
+          >
+            Delete job
+          </Button>
         </Stack>
       </Paper>
+
+      <Modal
+        opened={deleteModalOpen}
+        onClose={() => !deleting && setDeleteModalOpen(false)}
+        title="Delete this job?"
+      >
+        <Text size="sm" c="dimmed" mb="md">
+          This will remove the job, its description, generated drafts, PDFs, and any artifact records. This cannot be
+          undone.
+        </Text>
+        <Group justify="flex-end" gap="sm">
+          <Button variant="default" onClick={() => setDeleteModalOpen(false)} disabled={deleting}>
+            Cancel
+          </Button>
+          <Button color="red" onClick={handleDeleteJob} loading={deleting}>
+            Delete
+          </Button>
+        </Group>
+      </Modal>
 
       {job.keywords && job.keywords.length > 0 && (
         <Paper className="app-card" p="md" withBorder radius="lg">

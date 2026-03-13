@@ -14,7 +14,7 @@ export function getGoogleOAuthStartUrl(): string {
 
 /** Auth endpoints do not use CSRF; we must not call GET /api/auth/csrf before login. */
 function needsCsrfToken(method: string, path: string): boolean {
-  if (method !== "POST" && method !== "PATCH" && method !== "PUT") return false;
+  if (method !== "POST" && method !== "PATCH" && method !== "PUT" && method !== "DELETE") return false;
   const p = path.replace(getApiBase(), "").split("?")[0];
   return p !== "/api/auth/login" && p !== "/api/auth/logout";
 }
@@ -87,6 +87,7 @@ export const api = {
     request<T>(path, { method: "PATCH", body: JSON.stringify(body) }),
   put: <T>(path: string, body: unknown) =>
     request<T>(path, { method: "PUT", body: JSON.stringify(body) }),
+  delete: (path: string) => request<undefined>(path, { method: "DELETE" }),
 };
 
 /** Call after auth so the CSRF cookie is set/refreshed for subsequent POSTs. Returns the token from the response body. */

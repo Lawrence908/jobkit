@@ -1,6 +1,7 @@
-/* JobKit — design system */
+/* JobKit — design system & Mantine overrides */
+
+/* ——— Design tokens ——— */
 :root {
-  /* Typography */
   --font-display: "Syne", system-ui, sans-serif;
   --font-body: "DM Sans", system-ui, sans-serif;
 
@@ -30,6 +31,10 @@
   --focus-ring: 0 0 0 2px var(--bg-base), 0 0 0 4px var(--accent);
   --transition-fast: 0.15s ease;
   --transition-normal: 0.2s ease;
+  --space-page: 1.5rem;
+  --space-section: 1.5rem;
+  --content-max: 64rem;
+  --content-narrow: 36rem;
 }
 
 [data-mantine-color-scheme="light"] {
@@ -50,7 +55,10 @@
   --focus-ring: 0 0 0 2px var(--bg-base), 0 0 0 4px var(--accent);
 }
 
-* {
+/* ——— Base ——— */
+*,
+*::before,
+*::after {
   box-sizing: border-box;
 }
 
@@ -62,7 +70,8 @@ body {
   margin: 0;
   font-family: var(--font-body);
   font-size: 15px;
-  line-height: 1.5;
+  line-height: 1.55;
+  letter-spacing: 0.01em;
   background-color: var(--bg-base);
   color: var(--text-primary);
   -webkit-font-smoothing: antialiased;
@@ -71,15 +80,17 @@ body {
 
 #root {
   min-height: 100vh;
+  display: flex;
+  flex-direction: column;
 }
 
-/* Display font for headings and brand */
+/* ——— Typography ——— */
 .font-display {
   font-family: var(--font-display);
   letter-spacing: -0.02em;
 }
 
-/* ——— Mantine overrides (dark inputs, consistent borders) ——— */
+/* ——— Mantine: dark inputs & controls ——— */
 [data-mantine-color-scheme="dark"] .mantine-TextInput-input,
 [data-mantine-color-scheme="dark"] .mantine-Textarea-input,
 [data-mantine-color-scheme="dark"] .mantine-Select-input,
@@ -103,7 +114,6 @@ body {
   color: var(--text-muted);
 }
 
-/* Select: input and dropdown chevron size */
 .mantine-Select-input {
   padding-right: 2rem;
 }
@@ -129,7 +139,7 @@ body {
   background-color: var(--accent-subtle) !important;
 }
 
-/* Buttons: subtle and light variants use our tokens */
+/* ——— Buttons ——— */
 [data-mantine-color-scheme="dark"] .mantine-Button-root:not([data-variant="filled"]) {
   border-color: var(--border-muted);
 }
@@ -148,29 +158,39 @@ body {
   background-color: var(--accent-subtle);
 }
 
-/* Paper / Card */
+.mantine-Button-root[href] {
+  text-decoration: none;
+  color: inherit;
+}
+
+.mantine-Button-root[href]:hover {
+  text-decoration: none;
+  color: inherit;
+}
+
+/* ——— Paper / cards ——— */
 [data-mantine-color-scheme="dark"] .mantine-Paper-root {
   background-color: var(--bg-card);
   border-color: var(--border-subtle);
 }
 
-/* Alerts */
+/* ——— Alerts ——— */
 [data-mantine-color-scheme="dark"] .mantine-Alert-root {
   border-radius: var(--radius-md);
   border: 1px solid var(--border-muted);
 }
 
-/* Badge */
+/* ——— Badge ——— */
 [data-mantine-color-scheme="dark"] .mantine-Badge-root[data-variant="outline"] {
   border-color: var(--border-muted);
 }
 
-/* Loader */
+/* ——— Loader ——— */
 .mantine-Loader-root {
   color: var(--accent);
 }
 
-/* Links inside content */
+/* ——— Links ——— */
 a[href]:not([class*="mantine"]) {
   color: var(--accent);
   text-decoration: none;
@@ -182,18 +202,74 @@ a[href]:not([class*="mantine"]):hover {
   text-decoration: underline;
 }
 
-/* Button rendered as Link: keep button appearance, not default link style */
-.mantine-Button-root[href] {
-  text-decoration: none;
-  color: inherit;
+/* ——— Layout: app shell ——— */
+.mantine-AppShell-main {
+  /* Do not override padding-top: Mantine sets it to calc(header-offset + padding) so content is not hidden under the fixed header */
+  padding-bottom: 2rem !important;
+  flex: 1 1 auto;
+  min-height: 0;
 }
 
-.mantine-Button-root[href]:hover {
-  text-decoration: none;
-  color: inherit;
+.app-header-inner {
+  width: 100%;
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 0 var(--space-page);
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
 }
 
-/* ——— Job card hover ——— */
+/* ——— Page containers ——— */
+.page-container {
+  width: 100%;
+  max-width: 100%;
+  margin: 0 auto;
+  padding: 0 var(--space-page);
+}
+
+.page-container--narrow {
+  max-width: var(--content-narrow);
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.page-container--content {
+  max-width: var(--content-max);
+  margin-left: auto;
+  margin-right: auto;
+}
+
+/* ——— App cards (Papers) ——— */
+.app-card {
+  border-radius: var(--radius-lg) !important;
+  border: 1px solid var(--border-subtle) !important;
+  background-color: var(--bg-card) !important;
+  box-shadow: var(--shadow-card);
+}
+
+.app-card--elevated {
+  box-shadow: var(--shadow-card-hover);
+}
+
+/* ——— Job list cards ——— */
+.job-card,
+.mantine-Card-root.job-card {
+  border-radius: var(--radius-lg) !important;
+  border: 1px solid var(--border-muted) !important;
+  background-color: var(--bg-card) !important;
+  box-shadow: var(--shadow-card);
+  transition: box-shadow var(--transition-normal), transform var(--transition-normal), border-color var(--transition-fast);
+}
+
+.job-card:hover,
+.mantine-Card-root.job-card:hover {
+  box-shadow: var(--shadow-card-hover);
+  transform: translateY(-2px);
+  border-color: var(--border-strong) !important;
+}
+
 .job-card-hover {
   transition: box-shadow var(--transition-normal), transform var(--transition-normal);
 }
@@ -203,13 +279,13 @@ a[href]:not([class*="mantine"]):hover {
   transform: translateY(-2px);
 }
 
-/* ——— Login page: full-screen centering + card ——— */
+/* ——— Login page ——— */
 .login-page {
   min-height: 100vh;
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 2rem 1.5rem;
+  padding: 2rem var(--space-page);
   background: var(--bg-base);
 }
 
@@ -227,7 +303,6 @@ a[href]:not([class*="mantine"]):hover {
   box-shadow: var(--shadow-card-hover);
 }
 
-/* ——— Login page: force dark inputs/button (high specificity, no scheme dependency) ——— */
 .login-page .mantine-TextInput-input,
 .login-page .mantine-PasswordInput-input,
 .login-page input[type="text"],
@@ -276,7 +351,7 @@ a[href]:not([class*="mantine"]):hover {
   color: var(--text-primary) !important;
 }
 
-/* ——— New Job page: same input/textarea styling ——— */
+/* ——— New Job page inputs ——— */
 .new-job-page .mantine-TextInput-input,
 .new-job-page .mantine-Textarea-input {
   background-color: var(--bg-input) !important;
@@ -293,75 +368,4 @@ a[href]:not([class*="mantine"]):hover {
 .new-job-page .mantine-TextInput-input::placeholder,
 .new-job-page .mantine-Textarea-input::placeholder {
   color: var(--text-muted);
-}
-
-/* ——— Page container: consistent width, padding, centering ——— */
-.page-container {
-  width: 100%;
-  max-width: 100%;
-  margin: 0 auto;
-  padding: 0 1.5rem;
-}
-
-.page-container--narrow {
-  max-width: 36rem;
-  margin-left: auto;
-  margin-right: auto;
-}
-
-.page-container--content {
-  max-width: 64rem;
-  margin-left: auto;
-  margin-right: auto;
-}
-
-/* Card / box styling for Papers */
-.app-card {
-  border-radius: var(--radius-lg) !important;
-  border: 1px solid var(--border-subtle) !important;
-  background-color: var(--bg-card) !important;
-  box-shadow: var(--shadow-card);
-}
-
-.app-card--elevated {
-  box-shadow: var(--shadow-card-hover);
-}
-
-/* Job list cards: clear separation from background and from each other */
-.job-card {
-  border-radius: var(--radius-lg) !important;
-  border: 1px solid var(--border-muted) !important;
-  background-color: var(--bg-card) !important;
-  box-shadow: var(--shadow-card);
-  transition: box-shadow var(--transition-normal), transform var(--transition-normal), border-color var(--transition-fast);
-}
-
-.job-card:hover {
-  box-shadow: var(--shadow-card-hover);
-  transform: translateY(-2px);
-  border-color: var(--border-strong) !important;
-}
-
-/* Force Mantine Card to respect job-card styles (it may use internal bg) */
-.mantine-Card-root.job-card {
-  background-color: var(--bg-card) !important;
-  border-color: var(--border-muted) !important;
-}
-
-/* ——— App shell main content ——— */
-.mantine-AppShell-main {
-  padding-top: 1.5rem !important;
-  padding-bottom: 2rem !important;
-}
-
-/* Header inner: align with page container padding */
-.app-header-inner {
-  width: 100%;
-  max-width: 1100px;
-  margin: 0 auto;
-  padding: 0 1.5rem;
-  height: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
 }

@@ -15,6 +15,7 @@ import {
 } from "@mantine/core";
 import { IconFileText, IconUpload, IconCheck } from "@tabler/icons-react";
 import { api } from "../api/client";
+import { LLM_MODEL_OPTIONS } from "../config/llm-models";
 
 interface ProfileDefaults {
   default_tone: string;
@@ -44,6 +45,7 @@ export function ApplicationFlow({ jobId }: { jobId: number }) {
   const [tone, setTone] = useState("neutral");
   const [focus, setFocus] = useState("full-stack");
   const [length, setLength] = useState("1 page");
+  const [model, setModel] = useState("");
   const [generating, setGenerating] = useState(false);
   const [content, setContent] = useState<GeneratedContent>({ resume: null, cover_letter: null, notes: null });
   const [loadingContent, setLoadingContent] = useState(true);
@@ -90,7 +92,7 @@ export function ApplicationFlow({ jobId }: { jobId: number }) {
     setMessage("");
     setGenerating(true);
     try {
-      await api.post(`/api/jobs/${jobId}/generate`, { tone, focus, length });
+      await api.post(`/api/jobs/${jobId}/generate`, { tone, focus, length, model: model || undefined });
       setMessage("Generated. Review and edit below, then approve to create PDFs.");
       fetchGenerated();
     } catch (err) {
@@ -162,6 +164,7 @@ export function ApplicationFlow({ jobId }: { jobId: number }) {
           <Select label="Tone" data={TONE_OPTIONS} value={tone} onChange={(v) => setTone(v || "neutral")} size="xs" style={{ minWidth: 110 }} />
           <Select label="Focus" data={FOCUS_OPTIONS} value={focus} onChange={(v) => setFocus(v || "full-stack")} size="xs" style={{ minWidth: 110 }} />
           <Select label="Length" data={LENGTH_OPTIONS} value={length} onChange={(v) => setLength(v || "1 page")} size="xs" style={{ minWidth: 100 }} />
+          <Select label="Model" data={LLM_MODEL_OPTIONS} value={model} onChange={(v) => setModel(v ?? "")} size="xs" style={{ minWidth: 140 }} />
           <Button size="sm" color="amber" onClick={handleGenerate} loading={generating}>Generate</Button>
         </Group>
       </Box>
@@ -184,31 +187,31 @@ export function ApplicationFlow({ jobId }: { jobId: number }) {
                 </Tabs.List>
                 <Tabs.Panel value="resume" pt="sm">
                   <Textarea
-                    minRows={14}
-                    maxRows={24}
+                    minRows={18}
+                    maxRows={32}
                     value={content.resume ?? ""}
                     onChange={(e) => updateContent("resume", e.target.value)}
-                    styles={{ input: { fontSize: 13, fontFamily: "monospace" } }}
+                    styles={{ input: { fontSize: 13, fontFamily: "monospace", minHeight: 360 } }}
                   />
                   <Button size="xs" variant="light" color="amber" mt="xs" loading={savingDoc === "resume"} onClick={() => handleSaveDoc("resume")}>Save resume</Button>
                 </Tabs.Panel>
                 <Tabs.Panel value="cover_letter" pt="sm">
                   <Textarea
-                    minRows={10}
-                    maxRows={20}
+                    minRows={15}
+                    maxRows={28}
                     value={content.cover_letter ?? ""}
                     onChange={(e) => updateContent("cover_letter", e.target.value)}
-                    styles={{ input: { fontSize: 13, fontFamily: "monospace" } }}
+                    styles={{ input: { fontSize: 13, fontFamily: "monospace", minHeight: 320 } }}
                   />
                   <Button size="xs" variant="light" color="amber" mt="xs" loading={savingDoc === "cover_letter"} onClick={() => handleSaveDoc("cover_letter")}>Save cover letter</Button>
                 </Tabs.Panel>
                 <Tabs.Panel value="notes" pt="sm">
                   <Textarea
-                    minRows={6}
-                    maxRows={14}
+                    minRows={12}
+                    maxRows={20}
                     value={content.notes ?? ""}
                     onChange={(e) => updateContent("notes", e.target.value)}
-                    styles={{ input: { fontSize: 13, fontFamily: "monospace" } }}
+                    styles={{ input: { fontSize: 13, fontFamily: "monospace", minHeight: 280 } }}
                   />
                   <Button size="xs" variant="light" color="amber" mt="xs" loading={savingDoc === "notes"} onClick={() => handleSaveDoc("notes")}>Save notes</Button>
                 </Tabs.Panel>
