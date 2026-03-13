@@ -15,6 +15,8 @@ class ProfileUpdate(BaseModel):
     email: str | None = None
     phone: str | None = None
     linkedin: str | None = None
+    website: str | None = None
+    github: str | None = None
     pitch: str | None = None
     default_tone: str | None = None
     default_focus: str | None = None

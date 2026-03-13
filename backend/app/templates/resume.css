@@ -20,3 +20,7 @@ ul { margin: 0.3em 0; padding-left: 1.4em; }
 li { margin: 0.2em 0; }
 
 strong { font-weight: 600; }
+
+/* Contact links: show as hyperlinked text (not raw URLs); subtle so they look professional */
+a { color: #1967d2; text-decoration: none; }
+a:hover { text-decoration: underline; }

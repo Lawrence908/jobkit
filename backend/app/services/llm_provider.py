@@ -9,12 +9,16 @@ from app.core.config import get_settings
 logger = logging.getLogger(__name__)
 
 
-def chat_completion(messages: list[dict[str, str]], temperature: float | None = None) -> str:
-    """Call OpenAI-compatible chat completion; return content of first choice."""
+def chat_completion(
+    messages: list[dict[str, str]],
+    temperature: float | None = None,
+    model: str | None = None,
+) -> str:
+    """Call OpenAI-compatible chat completion; return content of first choice. model overrides LLM_MODEL when set."""
     settings = get_settings()
     url = f"{settings.llm_base_url.rstrip('/')}/chat/completions"
     payload = {
-        "model": settings.llm_model,
+        "model": (model or settings.llm_model).strip() or settings.llm_model,
         "messages": messages,
         "temperature": temperature if temperature is not None else settings.llm_temperature,
     }

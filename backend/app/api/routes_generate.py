@@ -53,6 +53,7 @@ class GenerateRequest(BaseModel):
     tone: str = "neutral"
     focus: str = "full-stack"
     length: str = "1 page"
+    model: str | None = None  # override LLM_MODEL when set (e.g. OpenRouter model id)
 
 
 def _load_job_json(job: Job) -> dict:
@@ -153,6 +154,7 @@ def generate(
             data.tone,
             data.focus,
             data.length,
+            model=data.model if (data.model and data.model.strip()) else None,
         )
     except httpx.HTTPStatusError as e:
         if e.response.status_code == 401:

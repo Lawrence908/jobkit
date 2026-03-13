@@ -1,4 +1,5 @@
 """Job CRUD and ingestion."""
+import shutil
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
@@ -9,6 +10,7 @@ from app.core.auth import get_current_user, verify_csrf
 from app.db.session import get_db
 from app.db.models import Job
 from app.services.ingest import ingest_job, job_json_to_markdown, save_job_to_disk, url_to_job_json, paste_only_to_job_json
+from app.services.extract import extract_keywords, extract_ats_signals
 from app.utils.files import job_slug, ensure_safe_relative_path
 from app.core.config import get_settings
 
@@ -25,6 +27,10 @@ class UpdateJobRequest(BaseModel):
     company: str | None = None
     role: str | None = None
     location: str | None = None
+
+
+class UpdateDescriptionRequest(BaseModel):
+    raw_body: str
 
 
 def _job_to_response(job: Job) -> dict:
@@ -84,6 +90,28 @@ def list_jobs(
     return [_job_to_response(j) for j in jobs]
 
 
+def _description_stats_from_disk(job: Job) -> dict:
+    """Load job.json and return description_word_count and description_preview for UI."""
+    import json
+    settings = get_settings()
+    job_dir = ensure_safe_relative_path(settings.jobkit_jobs_dir, job.slug)
+    job_json_path = job_dir / "job.json"
+    if not job_json_path.exists():
+        return {}
+    try:
+        job_json = json.loads(job_json_path.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+    raw = (job_json.get("raw_body") or "").strip()
+    word_count = len(raw.split()) if raw else 0
+    preview = (raw[:400] + "…") if len(raw) > 400 else raw
+    return {
+        "description_word_count": word_count,
+        "description_preview": preview or None,
+        "raw_body": raw or None,
+    }
+
+
 @router.get("/{job_id}")
 def get_job(
     job_id: int,
@@ -93,7 +121,55 @@ def get_job(
     job = db.query(Job).filter(Job.id == job_id).first()
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
-    return _job_to_response(job)
+    out = _job_to_response(job)
+    out.update(_description_stats_from_disk(job))
+    return out
+
+
+@router.post("/{job_id}/update-description")
+def update_job_description(
+    job_id: int,
+    request: Request,
+    data: UpdateDescriptionRequest,
+    db: Annotated[Session, Depends(get_db)],
+    _: Annotated[str, Depends(get_current_user)],
+):
+    """Update the job's stored description (raw_body) and re-extract keywords/ATS from role + description."""
+    verify_csrf(request)
+    import json
+    job = db.query(Job).filter(Job.id == job_id).first()
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    settings = get_settings()
+    job_dir = ensure_safe_relative_path(settings.jobkit_jobs_dir, job.slug)
+    job_dir.mkdir(parents=True, exist_ok=True)
+    job_json_path = job_dir / "job.json"
+    if job_json_path.exists():
+        job_json = json.loads(job_json_path.read_text(encoding="utf-8"))
+    else:
+        job_json = {
+            "url": job.url,
+            "company": job.company,
+            "role": job.role,
+            "location": job.location,
+            "raw_body": "",
+            "keywords": [],
+            "ats": {},
+            "source": job.source or "",
+        }
+    raw_body = (data.raw_body or "").strip()
+    job_json["raw_body"] = raw_body
+    combined = f"{job.role or ''}\n{raw_body}"
+    job_json["keywords"] = extract_keywords(combined)
+    job_json["ats"] = extract_ats_signals(combined)
+    job_md = job_json_to_markdown(job_json)
+    save_job_to_disk(job.slug, job_json, job_md)
+    job.keywords_json = job_json["keywords"]
+    db.commit()
+    db.refresh(job)
+    out = _job_to_response(job)
+    out.update(_description_stats_from_disk(job))
+    return out
 
 
 def _sync_job_to_sheet_if_configured(job: Job, db: Session) -> None:
@@ -208,3 +284,24 @@ def re_extract_job(
     db.commit()
     db.refresh(job)
     return _job_to_response(job)
+
+
+@router.delete("/{job_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_job(
+    job_id: int,
+    request: Request,
+    db: Annotated[Session, Depends(get_db)],
+    _: Annotated[str, Depends(get_current_user)],
+):
+    """Delete the job, its artifacts, and its folder on disk."""
+    verify_csrf(request)
+    job = db.query(Job).filter(Job.id == job_id).first()
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    slug = job.slug
+    db.delete(job)
+    db.commit()
+    job_dir = ensure_safe_relative_path(get_settings().jobkit_jobs_dir, slug)
+    if job_dir.exists():
+        shutil.rmtree(job_dir)
+    return None

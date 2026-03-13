@@ -9,6 +9,33 @@ from googleapiclient.discovery import build
 logger = logging.getLogger(__name__)
 
 
+def _column_letter(col_index: int) -> str:
+    """0-based column index to A1 notation letter(s). 0 -> A, 26 -> AA."""
+    result = ""
+    while col_index >= 0:
+        result = chr(65 + (col_index % 26)) + result
+        col_index = col_index // 26 - 1
+    return result or "A"
+
+
+def _contiguous_segments(indices: list[int]) -> list[tuple[int, int]]:
+    """Turn sorted column indices into (start, end) segments, end exclusive. E.g. [0,2,3,4] -> [(0,1),(2,5)]."""
+    if not indices:
+        return []
+    segments: list[tuple[int, int]] = []
+    start = indices[0]
+    prev = indices[0]
+    for i in indices[1:]:
+        if i == prev + 1:
+            prev = i
+        else:
+            segments.append((start, prev + 1))
+            start = i
+            prev = i
+    segments.append((start, prev + 1))
+    return segments
+
+
 def get_header_row(service, spreadsheet_id: str, sheet_name: str) -> list[str]:
     """Return the first row of the sheet as column headers (strings)."""
     result = service.spreadsheets().values().get(
@@ -54,7 +81,7 @@ def get_row(service, spreadsheet_id: str, sheet_name: str, row_index: int) -> li
 
 
 def find_row_by_url(service, spreadsheet_id: str, sheet_name: str, url_column: str, job_url: str) -> int | None:
-    """Return 1-based row index if job_url found in url_column, else None."""
+    """Return 1-based row index if job_url found in url_column, else None. Uses first row as header."""
     if not job_url or not job_url.strip():
         return None
     result = service.spreadsheets().values().get(
@@ -69,10 +96,50 @@ def find_row_by_url(service, spreadsheet_id: str, sheet_name: str, url_column: s
         col_idx = header.index(url_column.strip().lower())
     except ValueError:
         return None
+    want = job_url.strip()
     for i, row in enumerate(rows[1:], start=2):
-        if len(row) > col_idx and (row[col_idx] or "").strip() == job_url.strip():
+        if len(row) > col_idx and (row[col_idx] or "").strip() == want:
             return i
     return None
+
+
+def get_next_data_row(service, spreadsheet_id: str, sheet_name: str, max_rows: int = 1000) -> int:
+    """Return 1-based row number for the next empty row (after header + data). Extends table if needed."""
+    result = service.spreadsheets().values().get(
+        spreadsheetId=spreadsheet_id,
+        range=f"'{sheet_name}'!A1:ZZ{max_rows}",
+    ).execute()
+    rows = result.get("values", [])
+    if not rows:
+        return 1
+    return len(rows) + 1
+
+
+def _write_row_by_segments(
+    service,
+    spreadsheet_id: str,
+    sheet_name: str,
+    row_num: int,
+    header_row: list[str],
+    row_values: list[Any],
+) -> None:
+    """Write row_values to the given row, only in columns where header is non-empty (avoids offset from blank columns)."""
+    non_empty = [i for i, h in enumerate(header_row) if (h or "").strip()]
+    if not non_empty:
+        return
+    segments = _contiguous_segments(non_empty)
+    data = []
+    for start, end in segments:
+        col_a = _column_letter(start)
+        col_b = _column_letter(end - 1)
+        range_name = f"'{sheet_name}'!{col_a}{row_num}:{col_b}{row_num}"
+        vals = [row_values[i] for i in range(start, end)]
+        data.append({"range": range_name, "values": [vals]})
+    body = {"valueInputOption": "USER_ENTERED", "data": data}
+    service.spreadsheets().values().batchUpdate(
+        spreadsheetId=spreadsheet_id,
+        body=body,
+    ).execute()
 
 
 def append_row(service, spreadsheet_id: str, sheet_name: str, values: list) -> None:
@@ -213,7 +280,8 @@ def sync_job_to_sheet(
 ) -> None:
     """
     Find or append the row for this job and write/update it so columns match the sheet header.
-    Uses column_map to place company, role, job_url, status, date_submitted, links in correct columns.
+    Checks URL first: if job URL already exists, updates that row; otherwise appends to the next empty row.
+    Writes only to columns that have a non-empty header to avoid offset from blank columns.
     """
     header_row = get_header_row(service, spreadsheet_id, sheet_name)
     if not header_row:
@@ -233,10 +301,10 @@ def sync_job_to_sheet(
     row_num = find_row_by_url(service, spreadsheet_id, sheet_name, url_column, job_url)
     if row_num is not None:
         existing = get_row(service, spreadsheet_id, sheet_name, row_num)
-        # Pad existing to header length so merge doesn't truncate
         while len(existing) < len(header_row):
             existing.append("")
         row_values = merge_row_with_existing(header_row, row_values, existing, column_map)
-        update_row(service, spreadsheet_id, sheet_name, row_num, row_values, 0)
+        _write_row_by_segments(service, spreadsheet_id, sheet_name, row_num, header_row, row_values)
     else:
-        append_row(service, spreadsheet_id, sheet_name, row_values)
+        next_row = get_next_data_row(service, spreadsheet_id, sheet_name)
+        _write_row_by_segments(service, spreadsheet_id, sheet_name, next_row, header_row, row_values)

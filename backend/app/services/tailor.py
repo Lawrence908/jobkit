@@ -51,8 +51,9 @@ def generate_artifacts(
     tone: str,
     focus: str,
     length: str,
+    model: str | None = None,
 ) -> tuple[str, str, str]:
-    """Generate resume.md, cover_letter.md, notes.md content via LLM. Returns (resume_md, cover_letter_md, notes_md)."""
+    """Generate resume.md, cover_letter.md, notes.md content via LLM. Returns (resume_md, cover_letter_md, notes_md). model overrides default when set."""
     resume_base = get_resume_base()
     profile = get_profile()
     skills = get_skills()
@@ -76,20 +77,43 @@ def generate_artifacts(
     }
     context_str = json.dumps(context, indent=2)[:15000]
     system = """You are a resume and cover letter writer. You must ONLY use facts from the provided resume_base, selected_projects, and (if present) skills. Do not invent employers, dates, or metrics. Any number or claim must appear in the source data. Use the skills data to align technical wording with the job where it matches the candidate's real experience. Output valid markdown. Be concise for 1 page, more detailed for 2 pages.
-When a "profile" object is provided, use its name, email, phone, linkedin for contact and any "pitch" text where appropriate in the cover letter.
+When a "profile" object is provided, use its name, email, phone, linkedin, website, github for contact and any "pitch" text where appropriate in the cover letter.
 When an "ats" object is provided, use it to improve ATS (applicant tracking system) match: mirror the listed action_verbs in bullet points where accurate, weave in key_phrases from the job where they fit your real experience, and align wording with education/years_experience when true. Do not lie; only use ATS signals that genuinely apply to the candidate's background."""
 
+    resume_format = """
+Resume formatting rules (follow exactly):
+- Contact header: Put name and title at top. Then list email and phone as plain text on one line. For LinkedIn, website, and GitHub use markdown links only: write [LinkedIn](url), [Website](url), [GitHub](url) so the PDF shows the label as a clickable hyperlink, not the raw URL. Do not paste full URLs as visible text; use hyperlinked labels only.
+- Work experience: For each role use a short line that does not wrap. Put job title first. Use "CFB Wainwright" instead of "Canadian Forces Base Wainwright". Put location on the same line as the title after a separator (e.g. "|") or on the next line if the line would be too long. Keep the date range (e.g. 2020 – 2022) on the same line as the title or with the location.
+- Projects: For each project use this structure with explicit line breaks:
+  **Project Name**
+  Timeframe (e.g. 2025–present)
+
+  Tech stack and description paragraph (blank line after timeframe, blank line before this paragraph).
+"""
+
     # Resume
-    resume_prompt = f"""Using ONLY the data below, write a tailored resume in markdown for this job. Tone: {tone}. Focus: {focus}. Length: {length}. No invented facts. Use the "ats" signals (action_verbs, key_phrases) to phrase bullets so they match the job description where accurate.\n\n{context_str}"""
-    resume_md = chat_completion([{"role": "system", "content": system}, {"role": "user", "content": resume_prompt}])
+    resume_prompt = f"""Using ONLY the data below, write a tailored resume in markdown for this job. Tone: {tone}. Focus: {focus}. Length: {length}. No invented facts. Use the "ats" signals (action_verbs, key_phrases) to phrase bullets so they match the job description where accurate.
+{resume_format}
+
+{context_str}"""
+    resume_md = chat_completion(
+        [{"role": "system", "content": system}, {"role": "user", "content": resume_prompt}],
+        model=model,
+    )
 
     # Cover letter
     cover_prompt = f"""Using ONLY the data below, write a short cover letter in markdown for this role at this company. Tone: {tone}. No invented facts. Where relevant, use the "ats" action_verbs and key_phrases to echo the job language.\n\n{context_str}"""
-    cover_md = chat_completion([{"role": "system", "content": system}, {"role": "user", "content": cover_prompt}])
+    cover_md = chat_completion(
+        [{"role": "system", "content": system}, {"role": "user", "content": cover_prompt}],
+        model=model,
+    )
 
     # Notes
     notes_prompt = f"""Given the job and the resume data, output a brief markdown notes document with: 1) Keywords to emphasize, 2) Interview prep talking points, 3) Gaps/risks to address. Use only info from the context.\n\n{context_str}"""
-    notes_md = chat_completion([{"role": "system", "content": system}, {"role": "user", "content": notes_prompt}])
+    notes_md = chat_completion(
+        [{"role": "system", "content": system}, {"role": "user", "content": notes_prompt}],
+        model=model,
+    )
 
     return resume_md, cover_md, notes_md
 

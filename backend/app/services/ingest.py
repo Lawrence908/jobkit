@@ -1,11 +1,13 @@
 """Job ingestion: URL fetch, readability, markdown export, disk storage."""
 import json
 import logging
+import re
 from datetime import datetime
 from pathlib import Path
 from typing import Any
 
 import httpx
+from lxml import etree
 from readability import Document
 
 from app.core.config import get_settings
@@ -15,6 +17,27 @@ from app.utils.files import job_slug, ensure_safe_relative_path
 logger = logging.getLogger(__name__)
 
 USER_AGENT = "Mozilla/5.0 (compatible; JobKit/1.0)"
+
+# If Readability returns less than this many chars, try full-page text fallback (SPA / career pages).
+_MIN_BODY_FOR_GOOD_PARSE = 400
+
+
+def _text_from_html(html: str) -> str:
+    """Extract plain text from HTML (strip script/style, normalize whitespace)."""
+    try:
+        parser = etree.HTMLParser(recover=True, remove_blank_text=True)
+        root = etree.fromstring(html.encode("utf-8"), parser)
+        if root is None:
+            return ""
+        for tag in list(root.iter("script", "style", "noscript")):
+            parent = tag.getparent()
+            if parent is not None:
+                parent.remove(tag)
+        text = etree.tostring(root, method="text", encoding="unicode", with_tail=True)
+        text = re.sub(r"\s+", " ", text).strip()
+        return text
+    except Exception:
+        return ""
 
 
 def fetch_and_parse(url: str) -> tuple[str, str, str]:
@@ -26,10 +49,17 @@ def fetch_and_parse(url: str) -> tuple[str, str, str]:
     doc = Document(html)
     title = doc.title() or ""
     body_html = doc.summary()
-    # Strip tags for plain text
-    import re
     body_text = re.sub(r"<[^>]+>", " ", body_html)
     body_text = re.sub(r"\s+", " ", body_text).strip()
+
+    # On many career sites Readability fails to isolate the main content ("ruthless removal did not work").
+    # Fallback: use full-page text so we still get the job description for keyword extraction.
+    if len(body_text) < _MIN_BODY_FOR_GOOD_PARSE:
+        full_text = _text_from_html(html)
+        if len(full_text) > len(body_text):
+            body_text = full_text
+            logger.info("Readability returned little content; using full-page fallback")
+    logger.info("Parsed description: %d chars", len(body_text))
     return title, body_html, body_text
 
 

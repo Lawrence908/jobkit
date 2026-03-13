@@ -14,6 +14,8 @@ _DEFAULT_PROFILE: dict[str, Any] = {
     "email": "",
     "phone": "",
     "linkedin": "",
+    "website": "",
+    "github": "",
     "pitch": "",
     "default_tone": "neutral",
     "default_focus": "full-stack",
