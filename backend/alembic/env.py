@@ -1,0 +1,59 @@
+"""Alembic environment. Uses app config: DATABASE_URL for Postgres, else SQLite at JOBKIT_DATA_DIR/jobkit.db."""
+import os
+import sys
+from pathlib import Path
+
+# Add backend root so app is importable
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+from alembic import context
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+
+from app.core.config import get_settings
+from app.db.base import Base
+from app.db.models import Artifact, GoogleToken, InviteCode, Job  # noqa: F401 - for metadata
+
+config = context.config
+target_metadata = Base.metadata
+
+
+def get_url() -> str:
+    settings = get_settings()
+    if settings.use_postgres():
+        return settings.database_url
+    # Ensure SQLite DB directory exists when running migrations
+    settings.db_path.parent.mkdir(parents=True, exist_ok=True)
+    return f"sqlite:///{settings.db_path}"
+
+
+def run_migrations_offline() -> None:
+    """Run migrations in 'offline' mode."""
+    url = get_url()
+    context.configure(
+        url=url,
+        target_metadata=target_metadata,
+        literal_binds=True,
+        dialect_opts={"paramstyle": "named"},
+    )
+    with context.begin_transaction():
+        context.run_migrations()
+
+
+def run_migrations_online() -> None:
+    """Run migrations in 'online' mode."""
+    url = get_url()
+    connectable = create_engine(
+        url,
+        connect_args={"check_same_thread": False} if url.startswith("sqlite") else {},
+    )
+    with connectable.connect() as connection:
+        context.configure(connection=connection, target_metadata=target_metadata)
+        with context.begin_transaction():
+            context.run_migrations()
+
+
+if context.is_offline_mode():
+    run_migrations_offline()
+else:
+    run_migrations_online()
