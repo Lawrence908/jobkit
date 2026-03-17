@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import {
   TextInput,
   PasswordInput,
@@ -8,34 +8,41 @@ import {
   Title,
   Stack,
   Alert,
-  Anchor,
   Text,
+  Anchor,
 } from "@mantine/core";
-import { useAuth } from "../contexts/AuthContext";
+import { api } from "../api/client";
 
-export function LoginPage() {
+export function RegisterPage() {
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
-  const registered = searchParams.get("registered") === "1";
-  const { signIn } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [inviteCode, setInviteCode] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
+    if (password !== confirmPassword) {
+      setError("Passwords do not match");
+      return;
+    }
+    if (password.length < 6) {
+      setError("Password must be at least 6 characters");
+      return;
+    }
     setLoading(true);
     try {
-      const { error: err } = await signIn(email, password);
-      if (err) {
-        setError(err);
-      } else {
-        navigate("/dashboard", { replace: true });
-      }
+      await api.post<{ ok: boolean }>("/api/auth/register", {
+        email,
+        password,
+        invite_code: inviteCode.trim(),
+      });
+      navigate("/login?registered=1", { replace: true });
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Authentication failed");
+      setError(err instanceof Error ? err.message : "Registration failed");
     } finally {
       setLoading(false);
     }
@@ -46,15 +53,10 @@ export function LoginPage() {
       <div className="login-page__container">
         <Paper className="login-page__card" p="xl" shadow="md" radius="lg" withBorder>
           <Title order={2} mb="lg" className="font-display" style={{ fontWeight: 700 }}>
-            JobKit
+            Create account
           </Title>
           <form onSubmit={handleSubmit}>
             <Stack gap="md">
-              {registered && (
-                <Alert color="green" variant="light">
-                  Account created. Please log in.
-                </Alert>
-              )}
               {error && (
                 <Alert color="red" variant="light">
                   {error}
@@ -74,7 +76,24 @@ export function LoginPage() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
-                autoComplete="current-password"
+                autoComplete="new-password"
+                size="sm"
+                minLength={6}
+              />
+              <PasswordInput
+                label="Confirm password"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                required
+                autoComplete="new-password"
+                size="sm"
+              />
+              <TextInput
+                label="Invite code"
+                value={inviteCode}
+                onChange={(e) => setInviteCode(e.target.value)}
+                required
+                placeholder="Enter the invite code you received"
                 size="sm"
               />
               <Button
@@ -85,12 +104,12 @@ export function LoginPage() {
                 fullWidth
                 size="md"
               >
-                Log in
+                Register
               </Button>
               <Text size="sm" ta="center">
-                Don&apos;t have an account?{" "}
-                <Anchor component={Link} to="/register" size="sm">
-                  Register
+                Already have an account?{" "}
+                <Anchor component={Link} to="/login" size="sm">
+                  Log in
                 </Anchor>
               </Text>
             </Stack>

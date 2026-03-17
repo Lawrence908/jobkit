@@ -5,8 +5,7 @@ import { IconPlus } from "@tabler/icons-react";
 import { api } from "../api/client";
 import type { Job } from "../api/types";
 import { JobCard } from "../components/JobCard";
-
-const STATUS_OPTIONS = ["New", "Tailored", "Applied", "Interviewing", "Rejected", "Offer"];
+import { APPLICATION_STATUS_OPTIONS } from "../config/job-options";
 
 export function DashboardPage() {
   const [jobs, setJobs] = useState<Job[]>([]);
@@ -43,7 +42,7 @@ export function DashboardPage() {
         </Title>
         <Button
           component={Link}
-          to="/jobs/new"
+          to="/dashboard/jobs/new"
           variant="filled"
           leftSection={<IconPlus size={18} />}
           color="amber"
@@ -63,13 +62,13 @@ export function DashboardPage() {
             style={{ minWidth: 240, flex: "1 1 200px" }}
           />
           <Select
-            placeholder="Status"
+            placeholder="Application Status"
             clearable
-            data={STATUS_OPTIONS}
+            data={[...APPLICATION_STATUS_OPTIONS]}
             value={statusFilter}
             onChange={setStatusFilter}
             size="sm"
-            style={{ minWidth: 140 }}
+            style={{ minWidth: 200 }}
           />
         </Group>
       </Paper>
@@ -85,7 +84,7 @@ export function DashboardPage() {
                   : " Try changing the search or status filter."}
               </Text>
               {jobs.length === 0 && (
-                <Button component={Link} to="/jobs/new" variant="filled" color="amber" size="sm" leftSection={<IconPlus size={18} />}>
+                <Button component={Link} to="/dashboard/jobs/new" variant="filled" color="amber" size="sm" leftSection={<IconPlus size={18} />}>
                   New Job
                 </Button>
               )}

@@ -11,8 +11,17 @@ import {
   Center,
   Alert,
   Text,
+  Anchor,
+  Slider,
 } from "@mantine/core";
+import { Link } from "react-router-dom";
 import { api } from "../api/client";
+import {
+  LLM_PROVIDER_OPTIONS,
+  LLM_MODEL_OPTIONS_BY_PROVIDER,
+  DEFAULT_MODEL_BY_PROVIDER,
+  type LLMProvider,
+} from "../config/profile-llm";
 
 export interface Profile {
   name: string;
@@ -25,6 +34,14 @@ export interface Profile {
   default_tone: string;
   default_focus: string;
   default_length: string;
+  llm_provider?: string;
+  llm_api_key?: string;
+  llm_model?: string;
+  llm_temperature?: number;
+  google_drive_root_folder_id?: string;
+  google_sheets_spreadsheet_id?: string;
+  google_sheets_tab_name?: string;
+  google_sheets_url_column?: string;
 }
 
 const TONE_OPTIONS = ["neutral", "professional", "conversational"];
@@ -41,7 +58,15 @@ export function ProfilePage() {
   useEffect(() => {
     api
       .get<Profile>("/api/profile")
-      .then(setProfile)
+      .then((p) =>
+        setProfile({
+          ...p,
+          llm_provider: p.llm_provider ?? "openrouter",
+          llm_api_key: p.llm_api_key ?? "",
+          llm_model: p.llm_model ?? "anthropic/claude-sonnet-4.6",
+          llm_temperature: typeof p.llm_temperature === "number" ? p.llm_temperature : 0.2,
+        })
+      )
       .catch((e) => setError(e instanceof Error ? e.message : "Failed to load profile"))
       .finally(() => setLoading(false));
   }, []);
@@ -63,6 +88,14 @@ export function ProfilePage() {
         default_tone: profile.default_tone,
         default_focus: profile.default_focus,
         default_length: profile.default_length,
+        llm_provider: profile.llm_provider,
+        llm_api_key: profile.llm_api_key,
+        llm_model: profile.llm_model,
+        llm_temperature: profile.llm_temperature,
+        google_drive_root_folder_id: profile.google_drive_root_folder_id ?? "",
+        google_sheets_spreadsheet_id: profile.google_sheets_spreadsheet_id ?? "",
+        google_sheets_tab_name: profile.google_sheets_tab_name ?? "",
+        google_sheets_url_column: profile.google_sheets_url_column ?? "",
       });
       setProfile(updated);
       setSuccess(true);
@@ -95,7 +128,18 @@ export function ProfilePage() {
         Personalization
       </Title>
       <Text size="sm" c="dimmed">
-        Contact and defaults used when generating resumes and cover letters.
+        Contact and defaults used when generating resumes and cover letters.{" "}
+        <Anchor component={Link} to="/dashboard/profile/resume" size="sm">
+          Resume base
+        </Anchor>
+        {" · "}
+        <Anchor component={Link} to="/dashboard/profile/skills" size="sm">
+          Skills
+        </Anchor>
+        {" · "}
+        <Anchor component={Link} to="/dashboard/profile/projects" size="sm">
+          Projects
+        </Anchor>
       </Text>
 
       <Paper className="app-card" p="md" withBorder radius="lg">
@@ -180,6 +224,108 @@ export function ProfilePage() {
             data={LENGTH_OPTIONS}
             value={profile.default_length}
             onChange={(v) => v && setProfile({ ...profile, default_length: v })}
+          />
+        </Stack>
+      </Paper>
+
+      <Paper className="app-card" p="md" withBorder radius="lg">
+        <Stack gap="md">
+          <Text size="sm" fw={600} className="font-display">
+            LLM for generation
+          </Text>
+          <Text size="xs" c="dimmed">
+            Choose provider and API key for resume/cover letter generation. Stored in your profile.
+          </Text>
+          <Select
+            label="Provider"
+            data={LLM_PROVIDER_OPTIONS.map((o) => ({ value: o.value, label: o.label }))}
+            value={profile.llm_provider || "openrouter"}
+            onChange={(v) => {
+              const provider = (v || "openrouter") as LLMProvider;
+              const models = LLM_MODEL_OPTIONS_BY_PROVIDER[provider];
+              const currentInList = models.some((m) => m.value === (profile.llm_model || ""));
+              setProfile({
+                ...profile,
+                llm_provider: provider,
+                llm_model: currentInList ? profile.llm_model : DEFAULT_MODEL_BY_PROVIDER[provider],
+              });
+            }}
+          />
+          <TextInput
+            label="API key"
+            type="password"
+            value={profile.llm_api_key || ""}
+            onChange={(e) => setProfile({ ...profile, llm_api_key: e.target.value })}
+            placeholder={
+              profile.llm_provider === "openai"
+                ? "sk-proj-..."
+                : profile.llm_provider === "anthropic"
+                  ? "sk-ant-..."
+                  : "sk-or-v1-..."
+            }
+            description="Your key is stored in your profile and used only for your generations."
+          />
+          <Select
+            label="Model"
+            data={LLM_MODEL_OPTIONS_BY_PROVIDER[(profile.llm_provider || "openrouter") as LLMProvider].map((o) => ({
+              value: o.value,
+              label: o.label,
+            }))}
+            value={profile.llm_model || DEFAULT_MODEL_BY_PROVIDER[(profile.llm_provider || "openrouter") as LLMProvider]}
+            onChange={(v) => v && setProfile({ ...profile, llm_model: v })}
+          />
+          <Stack gap={4}>
+            <Text size="sm" fw={500}>
+              Temperature
+            </Text>
+            <Slider
+              min={0}
+              max={1}
+              step={0.1}
+              value={typeof profile.llm_temperature === "number" ? profile.llm_temperature : 0.2}
+              onChange={(v) => setProfile({ ...profile, llm_temperature: v })}
+              marks={[{ value: 0, label: "0" }, { value: 0.5, label: "0.5" }, { value: 1, label: "1" }]}
+            />
+            <Text size="xs" c="dimmed" mt="sm">
+              Lower (e.g. 0.2) = more focused and consistent; higher = more varied and creative. Default 0.2.
+            </Text>
+          </Stack>
+        </Stack>
+      </Paper>
+
+      <Paper className="app-card" p="md" withBorder radius="lg">
+        <Stack gap="md">
+          <Text size="sm" fw={600} className="font-display">
+            Google Drive &amp; Sheets (optional)
+          </Text>
+          <Text size="xs" c="dimmed">
+            Connect Google in the header, then set these to sync jobs to your own folder and tracker. Leave blank to never sync to Sheets.
+          </Text>
+          <TextInput
+            label="Drive root folder ID"
+            value={profile.google_drive_root_folder_id ?? ""}
+            onChange={(e) => setProfile({ ...profile, google_drive_root_folder_id: e.target.value })}
+            placeholder="e.g. 1ABC...xyz (from folder URL)"
+            description="Uploads go under this folder. Empty = create a JobKit folder in Drive."
+          />
+          <TextInput
+            label="Sheets spreadsheet ID"
+            value={profile.google_sheets_spreadsheet_id ?? ""}
+            onChange={(e) => setProfile({ ...profile, google_sheets_spreadsheet_id: e.target.value })}
+            placeholder="e.g. 1tBEe... (from spreadsheet URL)"
+            description="Only used when set. Job updates sync to this sheet."
+          />
+          <TextInput
+            label="Sheet tab name"
+            value={profile.google_sheets_tab_name ?? ""}
+            onChange={(e) => setProfile({ ...profile, google_sheets_tab_name: e.target.value })}
+            placeholder="e.g. Job Applications"
+          />
+          <TextInput
+            label="Job URL column name"
+            value={profile.google_sheets_url_column ?? ""}
+            onChange={(e) => setProfile({ ...profile, google_sheets_url_column: e.target.value })}
+            placeholder="Job URL (default)"
           />
         </Stack>
       </Paper>

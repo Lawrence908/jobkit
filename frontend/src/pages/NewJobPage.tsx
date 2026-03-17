@@ -1,12 +1,14 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Button, Title, Stack, TextInput, Textarea, Paper, Alert } from "@mantine/core";
+import { Button, Title, Stack, TextInput, Textarea, Paper, Alert, Select } from "@mantine/core";
 import { api } from "../api/client";
+import { APPLICATION_STATUS_OPTIONS, DEFAULT_APPLICATION_STATUS } from "../config/job-options";
 
 export function NewJobPage() {
   const navigate = useNavigate();
   const [url, setUrl] = useState("");
   const [rawText, setRawText] = useState("");
+  const [applicationStatus, setApplicationStatus] = useState<string | null>(DEFAULT_APPLICATION_STATUS);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -18,8 +20,9 @@ export function NewJobPage() {
       const job = await api.post<{ id: number }>("/api/jobs", {
         url: url.trim() || undefined,
         raw_text: rawText.trim() || undefined,
+        status: applicationStatus || DEFAULT_APPLICATION_STATUS,
       });
-      navigate(`/jobs/${(job as { id: number }).id}`, { replace: true });
+      navigate(`/dashboard/jobs/${(job as { id: number }).id}`, { replace: true });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to save job");
     } finally {
@@ -36,6 +39,14 @@ export function NewJobPage() {
         <form onSubmit={handleSubmit}>
           <Stack gap="md">
             {error && <Alert color="red" variant="light">{error}</Alert>}
+            <Select
+              label="Application Status"
+              data={[...APPLICATION_STATUS_OPTIONS]}
+              value={applicationStatus}
+              onChange={setApplicationStatus}
+              size="sm"
+              allowDeselect={false}
+            />
             <TextInput
               label="Job URL"
               placeholder="https://..."

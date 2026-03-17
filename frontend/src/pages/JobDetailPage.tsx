@@ -18,8 +18,7 @@ import {
 import { api } from "../api/client";
 import type { Job } from "../api/types";
 import { ApplicationFlow } from "../components/ApplicationFlow";
-
-const STATUS_OPTIONS = ["New", "Tailored", "Applied", "Interviewing", "Rejected", "Offer"];
+import { APPLICATION_STATUS_OPTIONS, REJECTION_REASON_OPTIONS } from "../config/job-options";
 
 interface TailorPreview {
   keywords: string[];
@@ -33,6 +32,7 @@ export function JobDetailPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [status, setStatus] = useState<string | null>(null);
+  const [rejectionReason, setRejectionReason] = useState<string | null>(null);
   const [company, setCompany] = useState("");
   const [role, setRole] = useState("");
   const [location, setLocation] = useState("");
@@ -52,6 +52,7 @@ export function JobDetailPage() {
       .then((j) => {
         setJob(j);
         setStatus(j.status);
+        setRejectionReason(j.rejection_reason ?? null);
         setCompany(j.company ?? "");
         setRole(j.role ?? "");
         setLocation(j.location ?? "");
@@ -72,19 +73,39 @@ export function JobDetailPage() {
     setStatus(value);
   };
 
-  const saveJob = async (overrides?: { status?: string; company?: string; role?: string; location?: string }) => {
+  const handleRejectionReasonChange = async (value: string | null) => {
+    if (!jobId) return;
+    await saveJob({ rejection_reason: value ?? undefined });
+    setRejectionReason(value);
+  };
+
+  const saveJob = async (overrides?: {
+    status?: string;
+    rejection_reason?: string;
+    company?: string;
+    role?: string;
+    location?: string;
+  }) => {
     if (!jobId) return;
     setSaving(true);
     setSaveMessage("");
     try {
-      const body: { status?: string; company?: string; role?: string; location?: string } = {};
+      const body: {
+        status?: string;
+        rejection_reason?: string;
+        company?: string;
+        role?: string;
+        location?: string;
+      } = {};
       if (overrides) {
         if (overrides.status !== undefined) body.status = overrides.status;
+        if (overrides.rejection_reason !== undefined) body.rejection_reason = overrides.rejection_reason;
         if (overrides.company !== undefined) body.company = overrides.company;
         if (overrides.role !== undefined) body.role = overrides.role;
         if (overrides.location !== undefined) body.location = overrides.location;
       } else {
         body.status = status ?? undefined;
+        body.rejection_reason = rejectionReason ?? undefined;
         body.company = company;
         body.role = role;
         body.location = location;
@@ -92,6 +113,7 @@ export function JobDetailPage() {
       const updated = await api.patch<Job>(`/api/jobs/${jobId}`, body);
       setJob(updated);
       if (updated.status != null) setStatus(updated.status);
+      if (updated.rejection_reason !== undefined) setRejectionReason(updated.rejection_reason ?? null);
       if (updated.company != null) setCompany(updated.company);
       if (updated.role != null) setRole(updated.role);
       if (updated.location != null) setLocation(updated.location);
@@ -126,7 +148,7 @@ export function JobDetailPage() {
     setDeleting(true);
     try {
       await api.delete(`/api/jobs/${jobId}`);
-      navigate("/", { replace: true });
+      navigate("/dashboard", { replace: true });
     } catch (err) {
       setDescriptionMessage(err instanceof Error ? err.message : "Delete failed");
       setTimeout(() => setDescriptionMessage(""), 5000);
@@ -160,12 +182,22 @@ export function JobDetailPage() {
           </Text>
           <Group align="flex-end" gap="sm" wrap="wrap">
             <Select
-              label="Status"
-              data={STATUS_OPTIONS}
+              label="Application Status"
+              data={[...APPLICATION_STATUS_OPTIONS]}
               value={status}
               onChange={handleStatusChange}
               disabled={saving}
-              style={{ minWidth: 160 }}
+              style={{ minWidth: 220 }}
+            />
+            <Select
+              label="Rejection Reason"
+              data={[...REJECTION_REASON_OPTIONS]}
+              value={rejectionReason}
+              onChange={handleRejectionReasonChange}
+              disabled={saving}
+              placeholder="Set when rejected or for outcome"
+              clearable
+              style={{ minWidth: 280 }}
             />
             <Button onClick={() => saveJob()} loading={saving} color="amber" size="sm">
               Save job
