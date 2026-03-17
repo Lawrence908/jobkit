@@ -56,6 +56,30 @@ For full instructions (OAuth consent screen, APIs, Drive folder ID, Sheets sprea
 
 See `.env.example` for the full list. Required for basic run: `SESSION_SECRET`, `ADMIN_USERNAME`, `ADMIN_PASSWORD`. For generation: `LLM_API_KEY`. For Drive/Sheets: all `GOOGLE_*` variables.
 
+## Supabase / database migrations
+
+Use the **backend venv** and **requirements.txt** for Alembic and the data migration script. Do not use system-installed `alembic` or `python3-alembic` (they pull in old SQLAlchemy 1.x and break the app).
+
+From repo root (`.env` can live in repo root or in `backend/`):
+
+```bash
+cd backend
+python3 -m venv .venv   # if you don't have it yet
+source .venv/bin/activate
+pip install -r requirements.txt
+```
+
+Then create tables on Supabase and optionally copy data from SQLite:
+
+```bash
+# 1. Create tables (DATABASE_URL in .env must point at Supabase)
+alembic upgrade head
+
+# 2. One-time: copy existing SQLite data into Supabase (default: data/jobkit.db)
+python scripts/migrate_sqlite_to_postgres.py
+# Or: python scripts/migrate_sqlite_to_postgres.py /path/to/jobkit.db
+```
+
 ## Data and reference material
 
 JobKit uses **YAML** for tailoring so it can do heuristic project matching and pass structured data to the LLM. The app loads:
