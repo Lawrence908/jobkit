@@ -11,7 +11,7 @@ router = APIRouter(prefix="/api/truth-store", tags=["truth-store"])
 
 @router.get("/status")
 def truth_store_status(
-    _: Annotated[str, Depends(get_current_user)],
+    user_id: Annotated[str, Depends(get_current_user)],
 ):
     loaded_at = get_loaded_at()
     projects = get_projects()
@@ -24,7 +24,7 @@ def truth_store_status(
 
 @router.post("/reload")
 def truth_store_reload(
-    _: Annotated[str, Depends(get_current_user)],
+    user_id: Annotated[str, Depends(get_current_user)],
 ):
     load_truth_store()
     loaded_at = get_loaded_at()

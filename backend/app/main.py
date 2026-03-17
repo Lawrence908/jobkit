@@ -9,12 +9,17 @@ from app.core.config import get_settings
 from app.core.logging import setup_logging
 from app.db.session import get_engine, get_session_factory, init_db
 from app.api.routes_auth import router as auth_router
+from app.api.routes_register import router as register_router
+from app.api.routes_admin import router as admin_router
 from app.api.routes_status import router as status_router
 from app.api.routes_jobs import router as jobs_router
 from app.api.routes_truth_store import router as truth_store_router
 from app.api.routes_generate import router as generate_router
 from app.api.routes_google import router as google_router
 from app.api.routes_profile import router as profile_router
+from app.api.routes_resume import router as resume_router
+from app.api.routes_skills import router as skills_router
+from app.api.routes_projects import router as projects_router
 from app.services.truth_store import load_truth_store
 
 setup_logging("INFO")
@@ -59,8 +64,13 @@ app.add_middleware(
 
 app.include_router(status_router)
 app.include_router(auth_router)
+app.include_router(register_router)
+app.include_router(admin_router)
 app.include_router(jobs_router)
 app.include_router(truth_store_router)
 app.include_router(generate_router)
 app.include_router(google_router)
 app.include_router(profile_router)
+app.include_router(resume_router)
+app.include_router(skills_router)
+app.include_router(projects_router)

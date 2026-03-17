@@ -5,8 +5,9 @@ from typing import Annotated
 
 import httpx
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, RedirectResponse
 from pydantic import BaseModel
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from app.core.auth import get_current_user, verify_csrf
@@ -19,12 +20,22 @@ from app.services.google_auth import get_credentials
 from app.services.google_drive import upload_file, ensure_folder
 from app.services.google_sheets import default_column_map, get_header_row, get_row, sync_job_to_sheet
 from app.utils.files import ensure_safe_relative_path
+from app.services import storage as storage_svc
 
 router = APIRouter(prefix="/api/jobs", tags=["generate"])
 
 
+def _get_user_job(db: Session, user_id: str, job_id: int) -> Job:
+    job = db.query(Job).filter(
+        Job.id == job_id,
+        or_(Job.user_id == user_id, Job.user_id.is_(None)),
+    ).first()
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    return job
+
+
 def _build_sheet_column_map(settings) -> dict:
-    """Build column map from settings; use defaults so row order matches common sheet headers."""
     column_map = {}
     if settings.google_sheets_column_company:
         column_map["company"] = settings.google_sheets_column_company
@@ -53,15 +64,21 @@ class GenerateRequest(BaseModel):
     tone: str = "neutral"
     focus: str = "full-stack"
     length: str = "1 page"
-    model: str | None = None  # override LLM_MODEL when set (e.g. OpenRouter model id)
+    model: str | None = None
 
 
 def _load_job_json(job: Job) -> dict:
+    """Load job.json from Storage when Supabase configured, else disk. Raises if not found."""
+    if storage_svc.use_storage() and job.user_id:
+        try:
+            return storage_svc.download_job_json(job.user_id, job.slug)
+        except Exception as e:
+            raise HTTPException(status_code=400, detail="Job data not found in storage") from e
     settings = get_settings()
     job_dir = ensure_safe_relative_path(settings.jobkit_jobs_dir, job.slug)
     json_path = job_dir / "job.json"
     if not json_path.exists():
-        raise HTTPException(status_code=400, detail="Job data not found on disk")
+        raise HTTPException(status_code=400, detail="Job data not found")
     return json.loads(json_path.read_text(encoding="utf-8"))
 
 
@@ -69,23 +86,29 @@ def _generated_dir(job: Job) -> Path:
     return ensure_safe_relative_path(get_settings().jobkit_jobs_dir, job.slug, "generated")
 
 
-_GENERATED_FILES = ("resume", "cover_letter", "notes")  # keys; files are resume.md, cover_letter.md, notes.md
+_GENERATED_FILES = ("resume", "cover_letter", "notes")
 
 
 @router.get("/{job_id}/generated")
 def get_generated(
     job_id: int,
     db: Annotated[Session, Depends(get_db)],
-    _: Annotated[str, Depends(get_current_user)],
+    user_id: Annotated[str, Depends(get_current_user)],
 ):
-    """Return raw markdown for generated resume, cover letter, and notes (null if file missing)."""
-    job = db.query(Job).filter(Job.id == job_id).first()
-    if not job:
-        raise HTTPException(status_code=404, detail="Job not found")
-    gen_dir = _generated_dir(job)
+    job = _get_user_job(db, user_id, job_id)
     out = {}
+    if storage_svc.use_storage() and job.user_id:
+        for key in _GENERATED_FILES:
+            name = "cover_letter.md" if key == "cover_letter" else f"{key}.md"
+            try:
+                out[key] = storage_svc.download_generated_md(job.user_id, job.slug, name)
+            except Exception:
+                out[key] = None
+        return out
+    gen_dir = _generated_dir(job)
     for key in _GENERATED_FILES:
-        path = gen_dir / f"{key}.md"
+        name = "cover_letter.md" if key == "cover_letter" else f"{key}.md"
+        path = gen_dir / name
         out[key] = path.read_text(encoding="utf-8") if path.exists() else None
     return out
 
@@ -100,19 +123,24 @@ def update_generated(
     doc_key: str,
     data: GeneratedUpdateBody,
     db: Annotated[Session, Depends(get_db)],
-    _: Annotated[str, Depends(get_current_user)],
+    user_id: Annotated[str, Depends(get_current_user)],
 ):
-    """Update one generated document (resume, cover_letter, or notes)."""
     if doc_key not in _GENERATED_FILES:
         raise HTTPException(status_code=400, detail="doc_key must be resume, cover_letter, or notes")
-    job = db.query(Job).filter(Job.id == job_id).first()
-    if not job:
-        raise HTTPException(status_code=404, detail="Job not found")
-    gen_dir = _generated_dir(job)
+    job = _get_user_job(db, user_id, job_id)
     filename = "cover_letter.md" if doc_key == "cover_letter" else f"{doc_key}.md"
-    path = gen_dir / filename
+    if storage_svc.use_storage() and job.user_id:
+        try:
+            storage_svc.upload_bytes(
+                storage_svc.generated_key(job.user_id, job.slug, filename),
+                data.content.encode("utf-8"),
+                "text/markdown",
+            )
+        except Exception:
+            pass
+    gen_dir = _generated_dir(job)
     gen_dir.mkdir(parents=True, exist_ok=True)
-    path.write_text(data.content, encoding="utf-8")
+    (gen_dir / filename).write_text(data.content, encoding="utf-8")
     return {"ok": True, "doc": doc_key}
 
 
@@ -120,14 +148,11 @@ def update_generated(
 def tailor_preview(
     job_id: int,
     db: Annotated[Session, Depends(get_db)],
-    _: Annotated[str, Depends(get_current_user)],
+    user_id: Annotated[str, Depends(get_current_user)],
 ):
-    """Return keywords and which projects would be selected for tailoring (for UI preview)."""
-    job = db.query(Job).filter(Job.id == job_id).first()
-    if not job:
-        raise HTTPException(status_code=404, detail="Job not found")
+    job = _get_user_job(db, user_id, job_id)
     keywords = job.keywords_json or []
-    selected = select_projects(keywords, "2 pages")  # show up to 6 projects
+    selected = select_projects(keywords, "2 pages", user_id, db)
     return {
         "keywords": keywords,
         "selected_projects": [{"name": p.get("name"), "description": (p.get("description") or "")[:120]} for p in selected],
@@ -140,12 +165,10 @@ def generate(
     request: Request,
     data: GenerateRequest,
     db: Annotated[Session, Depends(get_db)],
-    _: Annotated[str, Depends(get_current_user)],
+    user_id: Annotated[str, Depends(get_current_user)],
 ):
     verify_csrf(request)
-    job = db.query(Job).filter(Job.id == job_id).first()
-    if not job:
-        raise HTTPException(status_code=404, detail="Job not found")
+    job = _get_user_job(db, user_id, job_id)
     job_json = _load_job_json(job)
     try:
         resume_md, cover_md, notes_md = generate_artifacts(
@@ -155,46 +178,75 @@ def generate(
             data.focus,
             data.length,
             model=data.model if (data.model and data.model.strip()) else None,
+            user_id=user_id,
+            db=db,
         )
     except httpx.HTTPStatusError as e:
         if e.response.status_code == 401:
             raise HTTPException(
                 status_code=502,
-                detail="LLM API key invalid or missing. Set LLM_API_KEY in the backend environment.",
+                detail="LLM API key invalid or missing. Set your API key in Profile → LLM for generation, or LLM_API_KEY in the backend environment.",
             ) from e
         raise HTTPException(status_code=502, detail=f"Generation failed: {e!s}") from e
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"Generation failed: {e!s}") from e
     write_generated_artifacts(job.slug, resume_md, cover_md, notes_md)
-    settings = get_settings()
-    rel = f"{job.slug}/generated"
-    for art_type, name in [("resume_md", "resume.md"), ("cover_letter_md", "cover_letter.md"), ("notes_md", "notes.md")]:
-        path_str = f"{rel}/{name}"
-        existing = db.query(Artifact).filter(Artifact.job_id == job_id, Artifact.type == art_type).first()
-        if existing:
-            existing.path = path_str
-            db.add(existing)
-        else:
-            db.add(Artifact(job_id=job_id, type=art_type, path=path_str))
+    # When user_id is set, always store artifact path as storage key (user_id/jobs/slug/generated/...) for consistency
+    if job.user_id:
+        path_tuples = storage_svc.generated_artifact_paths(job.user_id, job.slug)
+        if storage_svc.use_storage():
+            try:
+                storage_svc.upload_generated_mds(job.user_id, job.slug, resume_md, cover_md, notes_md)
+            except Exception:
+                pass  # path still stored as storage key; download can fall back to disk
+    else:
+        path_tuples = None
+    if path_tuples:
+        for art_type, path_str in path_tuples:
+            existing = db.query(Artifact).filter(Artifact.job_id == job_id, Artifact.type == art_type).first()
+            if existing:
+                existing.path = path_str
+                db.add(existing)
+            else:
+                db.add(Artifact(job_id=job_id, user_id=user_id, type=art_type, path=path_str))
+    else:
+        rel = f"{job.slug}/generated"
+        for art_type, name in [("resume_md", "resume.md"), ("cover_letter_md", "cover_letter.md"), ("notes_md", "notes.md")]:
+            path_str = f"{rel}/{name}"
+            existing = db.query(Artifact).filter(Artifact.job_id == job_id, Artifact.type == art_type).first()
+            if existing:
+                existing.path = path_str
+                db.add(existing)
+            else:
+                db.add(Artifact(job_id=job_id, user_id=user_id, type=art_type, path=path_str))
     db.commit()
     return {"ok": True, "message": "Generated resume.md, cover_letter.md, notes.md"}
 
 
-def _do_render_pdfs(job_id: int, job_slug: str) -> None:
-    """Background task: render PDFs and update DB."""
+def _do_render_pdfs(job_id: int, job_slug: str, user_id: str) -> None:
     from app.db.session import SessionLocal
     try:
         results = render_job_pdfs(job_slug)
         db = SessionLocal()
         try:
             for art_type, pdf_path in results:
-                rel = f"outputs/{job_slug}/{pdf_path.name}"
+                if user_id:
+                    path_str = storage_svc.output_pdf_key(user_id, job_slug, pdf_path.name)
+                    if storage_svc.use_storage():
+                        try:
+                            storage_svc.upload_output_pdf(
+                                user_id, job_slug, pdf_path.name, pdf_path.read_bytes()
+                            )
+                        except Exception:
+                            pass  # path still storage key; download can fall back to disk
+                else:
+                    path_str = f"outputs/{job_slug}/{pdf_path.name}"
                 existing = db.query(Artifact).filter(Artifact.job_id == job_id, Artifact.type == art_type).first()
                 if existing:
-                    existing.path = rel
+                    existing.path = path_str
                     db.add(existing)
                 else:
-                    db.add(Artifact(job_id=job_id, type=art_type, path=rel))
+                    db.add(Artifact(job_id=job_id, user_id=user_id, type=art_type, path=path_str))
             db.commit()
         finally:
             db.close()
@@ -209,16 +261,14 @@ def render(
     request: Request,
     background_tasks: BackgroundTasks,
     db: Annotated[Session, Depends(get_db)],
-    _: Annotated[str, Depends(get_current_user)],
+    user_id: Annotated[str, Depends(get_current_user)],
 ):
     verify_csrf(request)
-    job = db.query(Job).filter(Job.id == job_id).first()
-    if not job:
-        raise HTTPException(status_code=404, detail="Job not found")
+    job = _get_user_job(db, user_id, job_id)
     generated_dir = ensure_safe_relative_path(get_settings().jobkit_jobs_dir, job.slug, "generated")
     if not (generated_dir / "resume.md").exists():
         raise HTTPException(status_code=400, detail="Generate artifacts first (resume.md not found)")
-    background_tasks.add_task(_do_render_pdfs, job_id, job.slug)
+    background_tasks.add_task(_do_render_pdfs, job_id, job.slug, user_id)
     return {"ok": True, "message": "PDF rendering started in background"}
 
 
@@ -226,11 +276,9 @@ def render(
 def list_artifacts(
     job_id: int,
     db: Annotated[Session, Depends(get_db)],
-    _: Annotated[str, Depends(get_current_user)],
+    user_id: Annotated[str, Depends(get_current_user)],
 ):
-    job = db.query(Job).filter(Job.id == job_id).first()
-    if not job:
-        raise HTTPException(status_code=404, detail="Job not found")
+    job = _get_user_job(db, user_id, job_id)
     artifacts = db.query(Artifact).filter(Artifact.job_id == job_id).all()
     base_url = "/api/jobs"
     out = []
@@ -251,14 +299,18 @@ def download_artifact(
     job_id: int,
     artifact_id: int,
     db: Annotated[Session, Depends(get_db)],
-    _: Annotated[str, Depends(get_current_user)],
+    user_id: Annotated[str, Depends(get_current_user)],
 ):
-    job = db.query(Job).filter(Job.id == job_id).first()
-    if not job:
-        raise HTTPException(status_code=404, detail="Job not found")
+    job = _get_user_job(db, user_id, job_id)
     art = db.query(Artifact).filter(Artifact.id == artifact_id, Artifact.job_id == job_id).first()
     if not art or not art.path:
         raise HTTPException(status_code=404, detail="Artifact not found")
+    if storage_svc.is_storage_key(art.path):
+        try:
+            signed_url = storage_svc.create_signed_url(art.path, expires_in=3600)
+            return RedirectResponse(url=signed_url, status_code=302)
+        except Exception as e:
+            raise HTTPException(status_code=404, detail="Artifact not found in storage") from e
     settings = get_settings()
     if art.path.startswith("outputs/"):
         base = settings.jobkit_outputs_dir
@@ -279,22 +331,26 @@ def upload_and_log(
     job_id: int,
     request: Request,
     db: Annotated[Session, Depends(get_db)],
-    _: Annotated[str, Depends(get_current_user)],
+    user_id: Annotated[str, Depends(get_current_user)],
 ):
+    from app.services.profile_store import get_profile
+
     verify_csrf(request)
-    token_row = db.query(GoogleToken).filter(GoogleToken.provider == "google").first()
+    token_row = db.query(GoogleToken).filter(
+        GoogleToken.provider == "google",
+        GoogleToken.user_id == user_id,
+    ).first()
     if not token_row:
         raise HTTPException(status_code=400, detail="Connect Google first (OAuth)")
-    creds = get_credentials(db)
+    creds = get_credentials(db, user_id=user_id)
     if not creds:
         raise HTTPException(status_code=400, detail="Invalid stored token; reconnect Google")
-    job = db.query(Job).filter(Job.id == job_id).first()
-    if not job:
-        raise HTTPException(status_code=404, detail="Job not found")
+    job = _get_user_job(db, user_id, job_id)
     settings = get_settings()
     jobs_dir = settings.jobkit_jobs_dir
     outputs_dir = settings.jobkit_outputs_dir
-    root_folder_id = settings.google_drive_root_folder_id
+    profile = get_profile(user_id, db)
+    root_folder_id = (profile.get("google_drive_root_folder_id") or "").strip() or settings.google_drive_root_folder_id
     if not root_folder_id:
         root_folder_id = ensure_folder(creds, None, "JobKit")
     folder_name = f"{job.company or 'Unknown'}-{job.role or 'Role'}"
@@ -303,18 +359,35 @@ def upload_and_log(
     resume_link = ""
     cover_link = ""
     notes_link = ""
+    import tempfile
     for art in artifacts:
-        if art.path.startswith("outputs/"):
-            base = outputs_dir
-            rel = art.path.replace("outputs/", "", 1)
+        fid, link = None, None
+        if storage_svc.is_storage_key(art.path):
+            try:
+                data = storage_svc.download_bytes(art.path)
+                name = art.path.split("/")[-1]
+                mime = "application/pdf" if name.endswith(".pdf") else "text/markdown"
+                with tempfile.NamedTemporaryFile(delete=False, suffix=name[-4:] if "." in name else "") as tmp:
+                    tmp.write(data)
+                    tmp.flush()
+                    fid, link = upload_file(creds, Path(tmp.name), name, mime, folder_id)
+                Path(tmp.name).unlink(missing_ok=True)
+            except Exception:
+                continue
         else:
-            base = jobs_dir
-            rel = art.path
-        path = ensure_safe_relative_path(base, *rel.split("/"))
-        if not path.exists():
+            if art.path.startswith("outputs/"):
+                base = outputs_dir
+                rel = art.path.replace("outputs/", "", 1)
+            else:
+                base = jobs_dir
+                rel = art.path
+            path = ensure_safe_relative_path(base, *rel.split("/"))
+            if not path.exists():
+                continue
+            mime = "application/pdf" if path.suffix == ".pdf" else "text/markdown"
+            fid, link = upload_file(creds, path, path.name, mime, folder_id)
+        if fid is None:
             continue
-        mime = "application/pdf" if path.suffix == ".pdf" else "text/markdown"
-        fid, link = upload_file(creds, path, path.name, mime, folder_id)
         art.drive_file_id = fid
         art.drive_link = link
         db.add(art)
@@ -325,9 +398,9 @@ def upload_and_log(
         elif art.type == "notes_md":
             notes_link = link
     db.commit()
-    spreadsheet_id = settings.google_sheets_spreadsheet_id
-    sheet_name = settings.google_sheets_tab_name
-    url_col = settings.google_sheets_url_column
+    spreadsheet_id = (profile.get("google_sheets_spreadsheet_id") or "").strip() or settings.google_sheets_spreadsheet_id
+    sheet_name = (profile.get("google_sheets_tab_name") or "").strip() or settings.google_sheets_tab_name
+    url_col = (profile.get("google_sheets_url_column") or "").strip() or settings.google_sheets_url_column or "Job URL"
     if spreadsheet_id and sheet_name:
         from googleapiclient.discovery import build
         service = build("sheets", "v4", credentials=creds)
