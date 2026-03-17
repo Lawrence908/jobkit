@@ -9,9 +9,10 @@ from app.db.models import Artifact, GoogleToken, Job
 
 def get_engine():
     settings = get_settings()
+    if settings.use_postgres():
+        return create_engine(settings.database_url)
     url = f"sqlite:///{settings.db_path}"
-    engine = create_engine(url, connect_args={"check_same_thread": False})
-    return engine
+    return create_engine(url, connect_args={"check_same_thread": False})
 
 
 def init_db(engine) -> None:
