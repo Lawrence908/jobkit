@@ -13,7 +13,7 @@ import {
   Box,
   Divider,
 } from "@mantine/core";
-import { IconFileText, IconUpload, IconCheck } from "@tabler/icons-react";
+import { IconFileText, IconUpload, IconCheck, IconExternalLink, IconDownload, IconBrandGoogleDrive } from "@tabler/icons-react";
 import { api } from "../api/client";
 import { LLM_MODEL_OPTIONS } from "../config/llm-models";
 
@@ -244,21 +244,62 @@ export function ApplicationFlow({ jobId }: { jobId: number }) {
           <Divider />
           <Box>
             <Text size="sm" fw={600} mb="xs" className="font-display">Artifacts</Text>
+            <Text size="xs" c="dimmed" mb="xs">View or download generated documents; open in Drive if uploaded.</Text>
             <Group gap="xs">
               <Button size="xs" variant="subtle" onClick={fetchArtifacts}>Refresh</Button>
             </Group>
-            <Stack gap="xs" mt="xs">
-              {artifacts.map((a) => (
-                <Group key={a.id} gap="sm">
-                  <Text size="xs" c="dimmed">{a.type.replace(/_/g, " ")}</Text>
-                  {a.download_url && (
-                    <Anchor size="xs" href={a.download_url} target="_blank" rel="noreferrer">Download</Anchor>
-                  )}
-                  {a.drive_link && (
-                    <Anchor size="xs" href={a.drive_link} target="_blank" rel="noreferrer">Drive</Anchor>
-                  )}
-                </Group>
-              ))}
+            <Stack gap="sm" mt="xs">
+              {artifacts.map((a) => {
+                const isPdf = a.type.endsWith("_pdf");
+                const label = a.type.replace(/_/g, " ");
+                const downloadFilename = a.type.replace(/_pdf$/, ".pdf").replace(/_md$/, ".md");
+                return (
+                  <Group key={a.id} gap="md" wrap="wrap" align="center">
+                    <Text size="sm" fw={500} style={{ minWidth: "8rem" }}>
+                      {label}
+                    </Text>
+                    <Group gap="xs">
+                      {a.download_url && (
+                        <>
+                          <Anchor
+                            size="xs"
+                            href={a.download_url}
+                            target="_blank"
+                            rel="noreferrer"
+                            style={{ display: "inline-flex", alignItems: "center", gap: 4 }}
+                          >
+                            <IconExternalLink size={14} />
+                            {isPdf ? "Preview in browser" : "View"}
+                          </Anchor>
+                          <Anchor
+                            size="xs"
+                            href={a.download_url}
+                            download={downloadFilename}
+                            target="_blank"
+                            rel="noreferrer"
+                            style={{ display: "inline-flex", alignItems: "center", gap: 4 }}
+                          >
+                            <IconDownload size={14} />
+                            Download
+                          </Anchor>
+                        </>
+                      )}
+                      {a.drive_link && (
+                        <Anchor
+                          size="xs"
+                          href={a.drive_link}
+                          target="_blank"
+                          rel="noreferrer"
+                          style={{ display: "inline-flex", alignItems: "center", gap: 4 }}
+                        >
+                          <IconBrandGoogleDrive size={14} />
+                          Open in Google Drive
+                        </Anchor>
+                      )}
+                    </Group>
+                  </Group>
+                );
+              })}
             </Stack>
           </Box>
         </>

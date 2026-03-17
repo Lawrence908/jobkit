@@ -1,14 +1,21 @@
 import { Link } from "react-router-dom";
-import { Card, Group, Badge, Text, Stack } from "@mantine/core";
-import { IconArrowRight } from "@tabler/icons-react";
+import { Card, Group, Badge, Text, Stack, Tooltip } from "@mantine/core";
+import { IconArrowRight, IconFileText, IconFiles } from "@tabler/icons-react";
 import type { Job } from "../api/types";
 
 const STATUS_COLORS: Record<string, string> = {
+  "Have Not Applied": "gray",
+  "Submitted - Pending Response": "cyan",
+  Rejected: "red",
+  Interviewing: "yellow",
+  "Offer Extended - In Progress": "green",
+  "Sent Follow Up Email": "teal",
+  "Re-Applied With Updated Resume": "violet",
+  "N/A": "dark",
+  // Legacy
   New: "gray",
   Tailored: "blue",
   Applied: "cyan",
-  Interviewing: "yellow",
-  Rejected: "red",
   Offer: "green",
 };
 
@@ -18,8 +25,21 @@ function formatDate(iso: string | null) {
   return d.toLocaleDateString();
 }
 
+/** Show first N words of title; full title in tooltip if truncated. */
+function titleDisplay(role: string, maxWords: number = 14): { display: string; full: string } {
+  const full = (role || "Untitled role").trim();
+  const words = full.split(/\s+/).filter(Boolean);
+  if (words.length <= maxWords) return { display: full, full };
+  const display = words.slice(0, maxWords).join(" ") + "…";
+  return { display, full };
+}
+
 export function JobCard({ job }: { job: Job }) {
   const statusColor = STATUS_COLORS[job.status] || "gray";
+  const { display: titleDisplayText, full: titleFull } = titleDisplay(job.role, 14);
+  const hasContent = job.has_generated_content === true;
+  const hasDocs = (job.artifact_count ?? 0) > 0;
+
   return (
     <Card
       shadow="sm"
@@ -27,7 +47,7 @@ export function JobCard({ job }: { job: Job }) {
       radius="lg"
       withBorder
       component={Link}
-      to={`/jobs/${job.id}`}
+      to={`/dashboard/jobs/${job.id}`}
       className="job-card"
       style={{
         textDecoration: "none",
@@ -38,19 +58,28 @@ export function JobCard({ job }: { job: Job }) {
       }}
     >
       <Stack gap="sm">
-        <Group justify="space-between" wrap="nowrap" align="flex-start">
-          <div style={{ minWidth: 0, flex: 1 }}>
-            <Text fw={600} lineClamp={1} size="md" className="font-display">
-              {job.role || "Untitled role"}
-            </Text>
-            <Text size="sm" c="dimmed" lineClamp={1} mt={4}>
-              {job.company || "Unknown company"}
-            </Text>
-          </div>
+        <Group justify="flex-end">
           <Badge color={statusColor} variant="light" size="sm">
             {job.status}
           </Badge>
         </Group>
+        <div style={{ minWidth: 0 }}>
+          <Tooltip label={titleFull} openDelay={400}>
+            <Text fw={600} lineClamp={3} size="md" className="font-display" style={{ lineHeight: 1.3 }}>
+              {titleDisplayText}
+            </Text>
+          </Tooltip>
+          <Text size="sm" c="dimmed" lineClamp={1} mt={4}>
+            {job.company || "Unknown company"}
+          </Text>
+        </div>
+
+        {job.description_preview && (
+          <Text size="xs" c="dimmed" lineClamp={2} style={{ lineHeight: 1.4 }}>
+            {job.description_preview}
+          </Text>
+        )}
+
         <Group gap="xs" style={{ marginTop: 2 }}>
           <Text size="xs" c="dimmed">
             {formatDate(job.created_at)}
@@ -61,6 +90,30 @@ export function JobCard({ job }: { job: Job }) {
             </Text>
           )}
         </Group>
+
+        <Group gap="sm" wrap="wrap">
+          {hasContent && (
+            <Tooltip label="Tailored content generated (resume, cover, notes)">
+              <Group gap={4} style={{ color: "var(--mantine-color-teal-6)" }}>
+                <IconFileText size={14} />
+                <Text size="xs" c="dimmed">
+                  Content generated
+                </Text>
+              </Group>
+            </Tooltip>
+          )}
+          {hasDocs && (
+            <Tooltip label={`${job.artifact_count} document(s) saved`}>
+              <Group gap={4} style={{ color: "var(--mantine-color-blue-6)" }}>
+                <IconFiles size={14} />
+                <Text size="xs" c="dimmed">
+                  Documents saved
+                </Text>
+              </Group>
+            </Tooltip>
+          )}
+        </Group>
+
         <Group justify="flex-end" mt="xs">
           <Text
             size="xs"

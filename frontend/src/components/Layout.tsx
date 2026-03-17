@@ -1,9 +1,10 @@
-import { useEffect, useState } from "react";
+import { useState, useEffect } from "react";
 import { Outlet } from "react-router-dom";
 import { AppShell, Button, Group, Title, Tooltip } from "@mantine/core";
 import { Link, useNavigate } from "react-router-dom";
-import { IconLogout, IconRefresh, IconTable, IconUser } from "@tabler/icons-react";
-import { api, refreshCsrfToken } from "../api/client";
+import { IconLogout, IconRefresh, IconTable, IconUser, IconShield } from "@tabler/icons-react";
+import { api } from "../api/client";
+import { useAuth } from "../contexts/AuthContext";
 import { GoogleStatus } from "./GoogleStatus";
 import { HubFooter } from "./HubFooter";
 
@@ -11,12 +12,21 @@ const headerHeight = 56;
 
 export function Layout() {
   const navigate = useNavigate();
+  const { signOut, session } = useAuth();
   const [reloading, setReloading] = useState(false);
   const [reloadMessage, setReloadMessage] = useState<string | null>(null);
+  const [isAdmin, setIsAdmin] = useState<boolean | null>(null);
 
   useEffect(() => {
-    refreshCsrfToken().catch(() => {});
-  }, []);
+    if (!session) {
+      setIsAdmin(null);
+      return;
+    }
+    api
+      .get<{ admin: boolean }>("/api/admin/check")
+      .then((res) => setIsAdmin(res?.admin ?? false))
+      .catch(() => setIsAdmin(false));
+  }, [session]);
 
   const handleReloadData = async () => {
     setReloadMessage(null);
@@ -34,8 +44,8 @@ export function Layout() {
   };
 
   const handleLogout = async () => {
-    await api.post("/api/auth/logout");
-    window.location.href = "/login";
+    await signOut();
+    navigate("/login", { replace: true });
   };
 
   return (
@@ -67,7 +77,7 @@ export function Layout() {
         <Group h="100%" justify="space-between" wrap="nowrap" gap="md" style={{ width: "100%" }}>
           <Title
             order={4}
-            onClick={() => navigate("/")}
+            onClick={() => navigate("/dashboard")}
             className="font-display"
             style={{
               cursor: "pointer",
@@ -94,7 +104,7 @@ export function Layout() {
             </Tooltip>
             <Button
               component={Link}
-              to="/tracker"
+              to="/dashboard/tracker"
               variant="subtle"
               color="dark"
               leftSection={<IconTable size={16} />}
@@ -104,7 +114,7 @@ export function Layout() {
             </Button>
             <Button
               component={Link}
-              to="/profile"
+              to="/dashboard/profile"
               variant="subtle"
               color="dark"
               leftSection={<IconUser size={16} />}
@@ -112,6 +122,18 @@ export function Layout() {
             >
               Profile
             </Button>
+            {isAdmin === true && (
+              <Button
+                component={Link}
+                to="/dashboard/admin"
+                variant="subtle"
+                color="dark"
+                leftSection={<IconShield size={16} />}
+                size="sm"
+              >
+                Admin
+              </Button>
+            )}
             <Button
               variant="subtle"
               color="dark"
