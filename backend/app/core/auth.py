@@ -1,40 +1,124 @@
-"""Single-user auth: session cookie, rate limiting, CSRF."""
+"""Auth: Supabase JWT validation with legacy session cookie fallback."""
 import hashlib
 import hmac
-import secrets
+import logging
 import time
-from collections import deque
 from typing import Annotated
 
+import jwt
+from jwt import PyJWKClient
 from fastapi import Cookie, Depends, HTTPException, Request, status
+
 from app.core.config import Settings, get_settings
+
+logger = logging.getLogger(__name__)
+
 SESSION_COOKIE = "jobkit_session"
-CSRF_COOKIE = "jobkit_csrf"
-SESSION_MAX_AGE = 86400 * 7  # 7 days
-LOGIN_RATE_LIMIT = 5
-LOGIN_RATE_WINDOW = 60  # seconds
-CSRF_TOKEN_TTL = 300  # 5 minutes
+SESSION_MAX_AGE = 86400 * 7
 
-# In-memory: (timestamp,) of recent failed logins
-_failed_logins: deque[float] = deque(maxlen=100)
-# username -> (token, expiry_ts) for CSRF tokens issued via GET /api/auth/csrf (works when cookie is not forwarded by proxy)
-_csrf_tokens: dict[str, tuple[str, float]] = {}
+# Algorithms Supabase may use: HS256 (legacy), RS256/ES256 (JWKS)
+_HS256_OPTS = {"algorithms": ["HS256"], "audience": "authenticated"}
+_ASYMMETRIC_ALGS = ["RS256", "ES256"]
 
 
-def _session_payload(username: str) -> str:
+def _decode_supabase_jwt(token: str, settings: Settings) -> dict:
+    """Decode and validate a Supabase access token. Returns the payload.
+
+    Tries HS256 with JWT secret first (legacy). If the token uses RS256/ES256
+    (Supabase signing keys), verifies via the project JWKS endpoint.
+    """
+    header = jwt.get_unverified_header(token)
+    alg = header.get("alg", "HS256")
+
+    if alg == "HS256" and settings.supabase_jwt_secret:
+        try:
+            return jwt.decode(
+                token,
+                settings.supabase_jwt_secret,
+                **_HS256_OPTS,
+            )
+        except jwt.InvalidAudienceError:
+            return jwt.decode(
+                token,
+                settings.supabase_jwt_secret,
+                algorithms=["HS256"],
+                options={"verify_aud": False},
+            )
+
+    if alg in _ASYMMETRIC_ALGS and settings.supabase_url:
+        jwks_uri = f"{settings.supabase_url.rstrip('/')}/auth/v1/.well-known/jwks.json"
+        jwks_client = PyJWKClient(jwks_uri)
+        signing_key = jwks_client.get_signing_key_from_jwt(token)
+        try:
+            return jwt.decode(
+                token,
+                signing_key.key,
+                algorithms=_ASYMMETRIC_ALGS,
+                audience="authenticated",
+            )
+        except jwt.InvalidAudienceError:
+            return jwt.decode(
+                token,
+                signing_key.key,
+                algorithms=_ASYMMETRIC_ALGS,
+                options={"verify_aud": False},
+            )
+
+    raise jwt.InvalidTokenError(f"Unsupported or missing alg: {alg}")
+
+
+def get_current_user(
+    request: Request,
+    jobkit_session: Annotated[str | None, Cookie(alias=SESSION_COOKIE)] = None,
+) -> str:
+    """Dependency: return user_id (UUID string) from Supabase JWT, or fall back to legacy session.
+
+    Priority:
+    1. Authorization: Bearer <supabase_jwt> -> user_id from JWT sub claim
+    2. Legacy session cookie -> admin_username (for backward compat during migration)
+    """
     settings = get_settings()
-    raw = f"{username}:{int(time.time())}"
-    sig = hmac.new(
-        settings.session_secret.encode("utf-8"),
-        raw.encode("utf-8"),
-        hashlib.sha256,
-    ).hexdigest()[:16]
-    return f"{raw}:{sig}"
+
+    auth_header = request.headers.get("Authorization", "")
+    if auth_header.startswith("Bearer "):
+        token = auth_header[7:]
+        if settings.supabase_jwt_secret:
+            try:
+                payload = _decode_supabase_jwt(token, settings)
+                user_id = payload.get("sub")
+                if not user_id:
+                    raise HTTPException(status_code=401, detail="Invalid token: no sub")
+                return user_id
+            except jwt.ExpiredSignatureError:
+                raise HTTPException(status_code=401, detail="Token expired")
+            except jwt.InvalidTokenError as e:
+                logger.warning("JWT validation failed: %s", e)
+                raise HTTPException(status_code=401, detail="Invalid token")
+
+    if jobkit_session:
+        username = _verify_legacy_session(jobkit_session, settings)
+        if username:
+            return username
+
+    raise HTTPException(status_code=401, detail="Not authenticated")
 
 
-def verify_session(payload: str) -> str | None:
-    """Verify session payload; return username or None."""
-    settings = get_settings()
+def get_optional_user(
+    request: Request,
+    jobkit_session: Annotated[str | None, Cookie(alias=SESSION_COOKIE)] = None,
+) -> str | None:
+    """Dependency: return user_id if authenticated, else None."""
+    try:
+        return get_current_user(request, jobkit_session)
+    except HTTPException:
+        return None
+
+
+# ---------------------------------------------------------------------------
+# Legacy session support (will be removed after full migration to Supabase Auth)
+# ---------------------------------------------------------------------------
+
+def _verify_legacy_session(payload: str, settings: Settings) -> str | None:
     parts = payload.split(":")
     if len(parts) != 3:
         return None
@@ -58,100 +142,22 @@ def verify_session(payload: str) -> str | None:
     return username
 
 
-def create_session_cookie(username: str) -> tuple[str, str]:
-    """Return (session_cookie_value, csrf_token)."""
-    payload = _session_payload(username)
-    csrf = secrets.token_urlsafe(32)
-    return payload, csrf
-
-
-def create_csrf_token() -> str:
-    """Return a new CSRF token (for refresh endpoint)."""
-    return secrets.token_urlsafe(32)
-
-
-def store_csrf_token(username: str, token: str) -> None:
-    """Store a CSRF token for this user (from GET /api/auth/csrf). Valid for CSRF_TOKEN_TTL."""
-    _csrf_tokens[username] = (token, time.time() + CSRF_TOKEN_TTL)
-
-
-def _check_stored_csrf_token(username: str | None, token: str | None) -> bool:
-    """True if username and token match a valid stored token."""
-    if not username or not token:
-        return False
-    entry = _csrf_tokens.get(username)
-    if not entry:
-        return False
-    stored_token, expiry = entry
-    if time.time() > expiry:
-        del _csrf_tokens[username]
-        return False
-    return hmac.compare_digest(stored_token, token)
-
-
-def check_login_rate_limit() -> None:
-    """Raise 429 if too many failed logins in the window."""
-    now = time.time()
-    while _failed_logins and _failed_logins[0] < now - LOGIN_RATE_WINDOW:
-        _failed_logins.popleft()
-    if len(_failed_logins) >= LOGIN_RATE_LIMIT:
-        raise HTTPException(
-            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            detail="Too many login attempts. Try again later.",
-        )
-
-
-def record_failed_login() -> None:
-    _failed_logins.append(time.time())
-
-
-def get_current_user(
-    request: Request,
-    jobkit_session: Annotated[str | None, Cookie(alias=SESSION_COOKIE)] = None,
-    settings: Annotated[Settings, Depends(get_settings)] = None,
-) -> str:
-    """Dependency: require valid session; return username."""
-    if not jobkit_session:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Not authenticated",
-        )
-    username = verify_session(jobkit_session)
-    if not username:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid or expired session",
-        )
-    return username
-
-
-def get_optional_user(
-    jobkit_session: Annotated[str | None, Cookie(alias=SESSION_COOKIE)] = None,
-) -> str | None:
-    """Dependency: return username if valid session, else None."""
-    if not jobkit_session:
-        return None
-    return verify_session(jobkit_session)
-
-
 def verify_csrf(request: Request) -> None:
-    """Validate CSRF: X-CSRF-Token header must match cookie jobkit_csrf, or a token we issued via GET /api/auth/csrf for this session (fallback when proxy does not forward cookies)."""
+    """CSRF check -- now a no-op for JWT-authenticated requests.
+
+    JWT auth is immune to CSRF since the token is sent via Authorization header.
+    Kept as a callable for backward compat; route handlers that call it won't break.
+    """
+    auth_header = request.headers.get("Authorization", "")
+    if auth_header.startswith("Bearer "):
+        return
+    # Legacy cookie path: check CSRF header vs cookie
     if request.method in ("GET", "HEAD", "OPTIONS"):
         return
     header_token = request.headers.get("X-CSRF-Token")
     if not header_token:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Invalid CSRF token",
-        )
-    jobkit_csrf = request.cookies.get(CSRF_COOKIE)
-    if jobkit_csrf and hmac.compare_digest(jobkit_csrf, header_token):
+        raise HTTPException(status_code=403, detail="Invalid CSRF token")
+    csrf_cookie = request.cookies.get("jobkit_csrf")
+    if csrf_cookie and hmac.compare_digest(csrf_cookie, header_token):
         return
-    jobkit_session = request.cookies.get(SESSION_COOKIE)
-    username = verify_session(jobkit_session) if jobkit_session else None
-    if _check_stored_csrf_token(username, header_token):
-        return
-    raise HTTPException(
-        status_code=status.HTTP_403_FORBIDDEN,
-        detail="Invalid CSRF token",
-    )
+    raise HTTPException(status_code=403, detail="Invalid CSRF token")

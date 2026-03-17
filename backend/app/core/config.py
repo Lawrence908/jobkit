@@ -1,12 +1,14 @@
 """Pydantic Settings loaded from environment."""
 from pathlib import Path
-from pydantic import Field, field_validator
+from urllib.parse import quote_plus
+
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=(".env", "../.env"),  # backend/.env or repo root .env
         env_file_encoding="utf-8",
         extra="ignore",
     )
@@ -17,7 +19,24 @@ class Settings(BaseSettings):
     session_secret: str = Field(default="change_me_long_random", alias="SESSION_SECRET")
     admin_username: str = Field(default="chris", alias="ADMIN_USERNAME")
     admin_password: str = Field(default="change_me_strong", alias="ADMIN_PASSWORD")
+    admin_user_id: str | None = Field(default=None, alias="ADMIN_USER_ID")  # Supabase user UUID for admin API access
     cors_extra_origins: str = Field(default="", alias="CORS_EXTRA_ORIGINS")  # comma-separated, e.g. http://100.x.x.x:8123
+
+    # Supabase
+    supabase_url: str = Field(default="", alias="SUPABASE_URL")
+    supabase_anon_key: str = Field(default="", alias="SUPABASE_ANON_KEY")
+    supabase_service_role_key: str = Field(default="", alias="SUPABASE_SERVICE_ROLE_KEY")
+    supabase_jwt_secret: str = Field(default="", alias="SUPABASE_JWT_SECRET")
+
+    # Database: when set, use Postgres (Supabase); otherwise SQLite at jobkit_data_dir/jobkit.db
+    # Option A: DATABASE_URL (password must be percent-encoded if it contains @#% etc.)
+    # Option B: DATABASE_HOST + DATABASE_USER + DATABASE_PASSWORD + DATABASE_NAME (password can contain @)
+    database_url: str | None = Field(default=None, alias="DATABASE_URL")
+    database_host: str | None = Field(default=None, alias="DATABASE_HOST")
+    database_user: str = Field(default="postgres", alias="DATABASE_USER")
+    database_password: str | None = Field(default=None, alias="DATABASE_PASSWORD")
+    database_port: int = Field(default=5432, alias="DATABASE_PORT")
+    database_name: str = Field(default="postgres", alias="DATABASE_NAME")
 
     # Storage paths (env can be string; Pydantic coerces to Path)
     jobkit_data_dir: Path = Field(default=Path("/app/data"), alias="JOBKIT_DATA_DIR")
@@ -59,6 +78,25 @@ class Settings(BaseSettings):
     google_sheets_column_cover_link: str = Field(default="", alias="GOOGLE_SHEETS_COLUMN_COVER_LINK")
     google_sheets_column_notes_link: str = Field(default="", alias="GOOGLE_SHEETS_COLUMN_NOTES_LINK")
 
+    @field_validator("database_url", "database_host", mode="before")
+    @classmethod
+    def empty_str_to_none(cls, v):
+        if v is not None and isinstance(v, str) and not v.strip():
+            return None
+        return v
+
+    @model_validator(mode="after")
+    def build_database_url_from_components(self):
+        """If DATABASE_URL is not set but DATABASE_HOST and DATABASE_PASSWORD are, build URL (password is safe to contain @)."""
+        if self.database_url or not self.database_host or self.database_password in (None, ""):
+            return self
+        safe_password = quote_plus(self.database_password)
+        self.database_url = (
+            f"postgresql://{self.database_user}:{safe_password}"
+            f"@{self.database_host}:{self.database_port}/{self.database_name}"
+        )
+        return self
+
     @field_validator("jobkit_data_dir", "jobkit_jobs_dir", "jobkit_outputs_dir", mode="before")
     @classmethod
     def coerce_path(cls, v):
@@ -68,7 +106,12 @@ class Settings(BaseSettings):
 
     @property
     def db_path(self) -> Path:
+        """SQLite path; only used when database_url is not set."""
         return self.jobkit_data_dir / "jobkit.db"
+
+    def use_postgres(self) -> bool:
+        """True when DATABASE_URL is set and non-empty."""
+        return bool(self.database_url and self.database_url.strip())
 
     def ensure_dirs(self) -> None:
         self.jobkit_data_dir.mkdir(parents=True, exist_ok=True)
