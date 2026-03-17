@@ -185,6 +185,26 @@ All mapping is case-insensitive. If you don’t set any `GOOGLE_SHEETS_COLUMN_*`
 
 ---
 
+## Per-user integration (Profile / Connections)
+
+**Default: job data is not synced to Google Sheets.** Sync only happens when:
+
+1. The **job owner** has connected Google (their own OAuth token).
+2. The **job owner** has set a spreadsheet and tab in their profile (Dashboard → Profile → “Google Drive & Sheets”).
+
+The server `.env` values for `GOOGLE_DRIVE_ROOT_FOLDER_ID`, `GOOGLE_SHEETS_SPREADSHEET_ID`, `GOOGLE_SHEETS_TAB_NAME`, and `GOOGLE_SHEETS_URL_COLUMN` are **optional**. When set, they act as fallbacks for single-user setups (e.g. your own instance). For multi-user, each user should set their own in **Profile** after connecting Google so their jobs go to their own folder and sheet.
+
+**Base document vs tracker with data**
+
+- JobKit does **not** auto-create a new empty “base” sheet for you. It writes to an **existing** sheet and tab you specify.
+- You can either:
+  - **Use an existing tracker**: Create a Google Sheet (with your preferred headers and optional dropdowns), get its ID and tab name, and put them in Profile. JobKit will find or append rows by Job URL and update that sheet.
+  - **Create a blank tracker**: Create a new Sheet, add a tab (e.g. “Job Applications”), add a header row (e.g. Company Name, Job URL, Application Status, Role, Date Submitted, …). Put the spreadsheet ID and tab name in Profile. JobKit will append new jobs to that sheet.
+
+So: we **use a tracker you create** (empty or with data); we do not upload a separate “base document” template.
+
+---
+
 ## Summary: `.env` snippet
 
 After setup, your Google-related block might look like:
