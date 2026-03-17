@@ -1,11 +1,14 @@
-"""Load and hold canonical resume + projects data from YAML."""
+"""Load and hold canonical resume + projects data from YAML. When use_postgres and db/user_id given, read from DB."""
 import logging
 from pathlib import Path
-from typing import Any
+from typing import Any, TYPE_CHECKING
 
 import yaml
 
 from app.core.config import get_settings
+
+if TYPE_CHECKING:
+    from sqlalchemy.orm import Session
 
 logger = logging.getLogger(__name__)
 
@@ -57,11 +60,33 @@ def get_resume_base() -> dict[str, Any]:
     return _resume_base
 
 
-def get_projects() -> list[dict[str, Any]]:
+def get_projects(user_id: str | None = None, db: "Session | None" = None) -> list[dict[str, Any]]:
+    if user_id and db is not None and get_settings().use_postgres():
+        from app.db.models import Project
+        rows = db.query(Project).filter(Project.user_id == user_id).order_by(Project.id).all()
+        return [
+            {
+                "name": p.name or "",
+                "description": p.description or "",
+                "link": p.link or "",
+                "status": p.status or "",
+                "dates": p.dates or "",
+                "tags": p.tags or [],
+                "tech_stack": p.tech_stack or [],
+                "bullets": p.bullets or [],
+            }
+            for p in rows
+        ]
     return _projects
 
 
-def get_skills() -> dict[str, Any] | list[Any]:
+def get_skills(user_id: str | None = None, db: "Session | None" = None) -> dict[str, Any] | list[Any]:
+    if user_id and db is not None and get_settings().use_postgres():
+        from app.db.models import UserSkills
+        row = db.query(UserSkills).filter(UserSkills.user_id == user_id).first()
+        if row:
+            return {"categories": row.categories or {}, "items": row.items or []}
+        return {"categories": {}, "items": []}
     return _skills
 
 

@@ -2,12 +2,17 @@
 import json
 import logging
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from app.core.config import get_settings
 from app.services.llm_provider import chat_completion
-from app.services.truth_store import get_projects, get_resume_base, get_skills
+from app.services.truth_store import get_projects, get_skills
 from app.services.profile_store import get_profile
+from app.services.resume_base_store import get_resume_base as get_resume_base_db
 from app.utils.files import ensure_safe_relative_path
+
+if TYPE_CHECKING:
+    from sqlalchemy.orm import Session
 
 logger = logging.getLogger(__name__)
 
@@ -35,9 +40,14 @@ def score_project(project: dict, job_keywords: set[str]) -> int:
     return score
 
 
-def select_projects(job_keywords: list[str], length: str) -> list[dict]:
+def select_projects(
+    job_keywords: list[str],
+    length: str,
+    user_id: str | None = None,
+    db: "Session | None" = None,
+) -> list[dict]:
     """Select and rank projects by relevance. length: '1 page' -> fewer, '2 pages' -> more."""
-    projects = get_projects()
+    projects = get_projects(user_id, db)
     keywords = _normalize_keywords(job_keywords)
     scored = [(score_project(p, keywords), p) for p in projects]
     scored.sort(key=lambda x: -x[0])
@@ -52,12 +62,21 @@ def generate_artifacts(
     focus: str,
     length: str,
     model: str | None = None,
+    user_id: str | None = None,
+    db: "Session | None" = None,
 ) -> tuple[str, str, str]:
     """Generate resume.md, cover_letter.md, notes.md content via LLM. Returns (resume_md, cover_letter_md, notes_md). model overrides default when set."""
-    resume_base = get_resume_base()
-    profile = get_profile()
-    skills = get_skills()
-    selected = select_projects(job_json.get("keywords") or [], length)
+    if user_id is not None and db is not None:
+        resume_base = get_resume_base_db(user_id, db)
+        profile = get_profile(user_id, db)
+        skills = get_skills(user_id, db)
+        selected = select_projects(job_json.get("keywords") or [], length, user_id, db)
+    else:
+        from app.services.truth_store import get_resume_base as get_resume_base_yaml
+        resume_base = get_resume_base_yaml()
+        profile = get_profile("", None)  # legacy: no user_id yields YAML profile or default
+        skills = get_skills()
+        selected = select_projects(job_json.get("keywords") or [], length)
     job_desc = (job_json.get("raw_body") or "")[:12000]
     ats = job_json.get("ats") or {}
     context = {
@@ -80,6 +99,20 @@ def generate_artifacts(
 When a "profile" object is provided, use its name, email, phone, linkedin, website, github for contact and any "pitch" text where appropriate in the cover letter.
 When an "ats" object is provided, use it to improve ATS (applicant tracking system) match: mirror the listed action_verbs in bullet points where accurate, weave in key_phrases from the job where they fit your real experience, and align wording with education/years_experience when true. Do not lie; only use ATS signals that genuinely apply to the candidate's background."""
 
+    # LLM overrides: from profile when user has set an API key, else env; request model overrides when set
+    llm_kwargs: dict = {}
+    if profile.get("llm_api_key"):
+        llm_kwargs["provider"] = profile.get("llm_provider") or "openrouter"
+        llm_kwargs["api_key"] = profile["llm_api_key"]
+        llm_kwargs["model"] = (model or profile.get("llm_model") or "").strip() or profile.get("llm_model")
+        llm_kwargs["temperature"] = profile.get("llm_temperature")
+    else:
+        if model:
+            llm_kwargs["model"] = model
+
+    def _chat(msgs: list, **kwargs: object) -> str:
+        return chat_completion(msgs, **{**llm_kwargs, **kwargs})
+
     resume_format = """
 Resume formatting rules (follow exactly):
 - Contact header: Put name and title at top. Then list email and phone as plain text on one line. For LinkedIn, website, and GitHub use markdown links only: write [LinkedIn](url), [Website](url), [GitHub](url) so the PDF shows the label as a clickable hyperlink, not the raw URL. Do not paste full URLs as visible text; use hyperlinked labels only.
@@ -96,23 +129,20 @@ Resume formatting rules (follow exactly):
 {resume_format}
 
 {context_str}"""
-    resume_md = chat_completion(
+    resume_md = _chat(
         [{"role": "system", "content": system}, {"role": "user", "content": resume_prompt}],
-        model=model,
     )
 
     # Cover letter
     cover_prompt = f"""Using ONLY the data below, write a short cover letter in markdown for this role at this company. Tone: {tone}. No invented facts. Where relevant, use the "ats" action_verbs and key_phrases to echo the job language.\n\n{context_str}"""
-    cover_md = chat_completion(
+    cover_md = _chat(
         [{"role": "system", "content": system}, {"role": "user", "content": cover_prompt}],
-        model=model,
     )
 
     # Notes
     notes_prompt = f"""Given the job and the resume data, output a brief markdown notes document with: 1) Keywords to emphasize, 2) Interview prep talking points, 3) Gaps/risks to address. Use only info from the context.\n\n{context_str}"""
-    notes_md = chat_completion(
+    notes_md = _chat(
         [{"role": "system", "content": system}, {"role": "user", "content": notes_prompt}],
-        model=model,
     )
 
     return resume_md, cover_md, notes_md

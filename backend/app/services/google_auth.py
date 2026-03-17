@@ -1,9 +1,9 @@
 """Google OAuth 2.0 flow and token storage."""
 import logging
-from urllib.parse import urlencode
 
 from google_auth_oauthlib.flow import Flow
 from google.oauth2.credentials import Credentials
+from sqlalchemy import or_
 
 from app.core.config import get_settings
 from app.core.crypto import decrypt_refresh_token, encrypt_refresh_token
@@ -36,9 +36,17 @@ def get_flow():
 
 
 def auth_url() -> str:
+    """Legacy: auth URL without state."""
     flow = get_flow()
-    auth_url, _ = flow.authorization_url(access_type="offline", prompt="consent")
-    return auth_url
+    url, _ = flow.authorization_url(access_type="offline", prompt="consent")
+    return url
+
+
+def auth_url_with_state(state: str) -> str:
+    """Auth URL with state parameter for user identification in callback."""
+    flow = get_flow()
+    url, _ = flow.authorization_url(access_type="offline", prompt="consent", state=state)
+    return url
 
 
 def exchange_code(code: str) -> tuple[Credentials, str]:
@@ -49,21 +57,41 @@ def exchange_code(code: str) -> tuple[Credentials, str]:
     return creds, refresh
 
 
-def save_refresh_token(db, refresh_token: str) -> None:
+def save_refresh_token(db, refresh_token: str, user_id: str | None = None) -> None:
     settings = get_settings()
     encrypted = encrypt_refresh_token(refresh_token, settings.google_token_encryption_key)
-    existing = db.query(GoogleToken).filter(GoogleToken.provider == "google").first()
+    if user_id:
+        existing = db.query(GoogleToken).filter(
+            GoogleToken.provider == "google",
+            GoogleToken.user_id == user_id,
+        ).first()
+    else:
+        existing = db.query(GoogleToken).filter(GoogleToken.provider == "google").first()
     if existing:
         existing.encrypted_refresh_token = encrypted
         existing.scopes = ",".join(SCOPES)
+        if user_id:
+            existing.user_id = user_id
         db.add(existing)
     else:
-        db.add(GoogleToken(provider="google", encrypted_refresh_token=encrypted, scopes=",".join(SCOPES)))
+        db.add(GoogleToken(
+            user_id=user_id,
+            provider="google",
+            encrypted_refresh_token=encrypted,
+            scopes=",".join(SCOPES),
+        ))
     db.commit()
 
 
-def get_credentials(db):
-    row = db.query(GoogleToken).filter(GoogleToken.provider == "google").first()
+def get_credentials(db, user_id: str | None = None):
+    """Return credentials for the given user. When user_id is set, only that user's token is used (no global fallback)."""
+    if user_id:
+        row = db.query(GoogleToken).filter(
+            GoogleToken.provider == "google",
+            GoogleToken.user_id == user_id,
+        ).first()
+    else:
+        row = db.query(GoogleToken).filter(GoogleToken.provider == "google").first()
     if not row:
         return None
     settings = get_settings()
