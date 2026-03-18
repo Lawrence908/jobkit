@@ -12,7 +12,7 @@ from sqlalchemy.orm import sessionmaker
 
 from app.core.config import get_settings
 from app.db.base import Base
-from app.db.models import Artifact, GoogleToken, InviteCode, Job  # noqa: F401 - for metadata
+from app.db.models import Artifact, GoogleToken, InviteCode, Job, JobStatusEvent, InterviewPrep  # noqa: F401 - for metadata
 
 config = context.config
 target_metadata = Base.metadata
