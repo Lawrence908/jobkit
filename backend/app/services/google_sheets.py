@@ -308,3 +308,54 @@ def sync_job_to_sheet(
     else:
         next_row = get_next_data_row(service, spreadsheet_id, sheet_name)
         _write_row_by_segments(service, spreadsheet_id, sheet_name, next_row, header_row, row_values)
+
+
+def _sheet_id_for_tab(service, spreadsheet_id: str, sheet_name: str) -> int | None:
+    meta = service.spreadsheets().get(spreadsheetId=spreadsheet_id).execute()
+    for s in meta.get("sheets", []):
+        props = s.get("properties") or {}
+        if (props.get("title") or "") == sheet_name:
+            sid = props.get("sheetId")
+            return int(sid) if sid is not None else None
+    return None
+
+
+def delete_job_row_from_sheet(
+    service,
+    spreadsheet_id: str,
+    sheet_name: str,
+    url_column: str,
+    job_url: str,
+) -> bool:
+    """
+    Remove the data row whose url_column matches job_url (same matching as sync).
+    Returns True if a row was deleted. No-op if URL empty or no matching row.
+    """
+    if not (job_url or "").strip():
+        return False
+    row_num = find_row_by_url(service, spreadsheet_id, sheet_name, url_column, job_url)
+    if row_num is None:
+        return False
+    sheet_id = _sheet_id_for_tab(service, spreadsheet_id, sheet_name)
+    if sheet_id is None:
+        raise ValueError(f"Sheet tab not found: {sheet_name!r}")
+    # row_num is 1-based (header = 1); deleteDimension startIndex is 0-based
+    start = row_num - 1
+    service.spreadsheets().batchUpdate(
+        spreadsheetId=spreadsheet_id,
+        body={
+            "requests": [
+                {
+                    "deleteDimension": {
+                        "range": {
+                            "sheetId": sheet_id,
+                            "dimension": "ROWS",
+                            "startIndex": start,
+                            "endIndex": start + 1,
+                        }
+                    }
+                }
+            ]
+        },
+    ).execute()
+    return True

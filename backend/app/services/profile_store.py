@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
 from app.db.models import Profile
+from app.services.avatar_store import has_avatar as user_has_avatar
 
 logger = logging.getLogger(__name__)
 
@@ -66,7 +67,9 @@ def get_profile(user_id: str, db: Session | None = None) -> dict[str, Any]:
     if settings.use_postgres() and db is not None:
         row = db.query(Profile).filter(Profile.user_id == user_id).first()
         if row:
-            return _row_to_profile(row)
+            p = _row_to_profile(row)
+            p["has_avatar"] = user_has_avatar(user_id)
+            return p
         row = Profile(
             user_id=user_id,
             name=_DEFAULT_PROFILE["name"],
@@ -87,10 +90,14 @@ def get_profile(user_id: str, db: Session | None = None) -> dict[str, Any]:
         db.add(row)
         db.commit()
         db.refresh(row)
-        return _row_to_profile(row)
+        p = _row_to_profile(row)
+        p["has_avatar"] = user_has_avatar(user_id)
+        return p
     path = _profile_path()
     if not path.exists():
-        return _DEFAULT_PROFILE.copy()
+        o = _DEFAULT_PROFILE.copy()
+        o["has_avatar"] = user_has_avatar(user_id)
+        return o
     try:
         with open(path, encoding="utf-8") as f:
             data = yaml.safe_load(f) or {}
@@ -98,10 +105,13 @@ def get_profile(user_id: str, db: Session | None = None) -> dict[str, Any]:
         for k in out:
             if k in data and data[k] is not None:
                 out[k] = data[k]
+        out["has_avatar"] = user_has_avatar(user_id)
         return out
     except Exception as e:
         logger.warning("Failed to load profile %s: %s", path, e)
-        return _DEFAULT_PROFILE.copy()
+        o = _DEFAULT_PROFILE.copy()
+        o["has_avatar"] = user_has_avatar(user_id)
+        return o
 
 
 def save_profile(user_id: str, profile: dict[str, Any], db: Session | None = None) -> None:
