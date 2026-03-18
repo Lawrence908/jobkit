@@ -39,3 +39,15 @@ export const REJECTION_REASON_OPTIONS = [
 ] as const;
 
 export const DEFAULT_APPLICATION_STATUS = "Have Not Applied";
+
+export const SOURCE_PLATFORM_OPTIONS = [
+  "",
+  "LinkedIn",
+  "Indeed",
+  "Company Site",
+  "Referral",
+  "Recruiter",
+  "Other",
+] as const;
+
+export const WORK_ARRANGEMENT_OPTIONS = ["", "Remote", "Hybrid", "Onsite"] as const;
