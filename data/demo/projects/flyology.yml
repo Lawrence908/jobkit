@@ -1,0 +1,33 @@
+# At age 12, Ada methodically researched flight. She investigated wing materials
+# (paper, oilsilk, wires, feathers), studied bird anatomy for wing-to-body proportions,
+# planned to write a book called "Flyology" with illustrated plates, and envisioned
+# integrating steam power with flight. She even planned compass-based navigation
+# for cross-country routes over mountains and rivers.
+
+name: "Flyology: A Study of Mechanical Flight"
+description: >-
+  Independent research project conducted at age 12 investigating the mechanics of
+  powered flight. Involved systematic analysis of wing materials, bird anatomy, and
+  propulsion methods. Included plans for a written treatise with illustrated plates,
+  compass-based cross-country navigation, and integration of steam propulsion with
+  wing-based flight systems.
+link: ""
+status: Research (1828)
+dates: "1828"
+tags:
+  - research
+  - engineering
+  - physics
+  - anatomy
+  - technical-writing
+tech_stack:
+  - Materials analysis (paper, oilsilk, wire, feathers)
+  - Anatomical study (bird wing-to-body ratios)
+  - Steam propulsion theory
+  - Compass navigation
+  - Technical illustration
+bullets:
+  - Investigated multiple wing materials and sizes, systematically comparing paper, oilsilk, wire, and feathers for suitability in mechanical flight.
+  - Studied bird anatomy to determine optimal wing-to-body proportions, applying biological principles to engineering design.
+  - Planned a comprehensive treatise ("Flyology") with illustrated plates documenting findings and design specifications.
+  - Designed a cross-country navigation system using compass bearings to plot direct routes over mountains, rivers, and valleys.

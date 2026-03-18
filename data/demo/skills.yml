@@ -1,0 +1,75 @@
+# Demo skills — Ada Lovelace, reimagined as a modern developer.
+
+categories:
+  languages_frameworks:
+    - Python (3.10–3.12) – FastAPI, NumPy, SymPy, Pandas
+    - TypeScript / JavaScript (ES6+) – React, Node.js, Vite
+    - Rust – systems programming, WebAssembly
+    - SQL (PostgreSQL, SQLite)
+    - LaTeX – technical documentation, mathematical typesetting
+    - HTML5, CSS3 – Tailwind CSS, responsive design
+  algorithms_computation:
+    - Numerical methods (Bernoulli numbers, series computation, interpolation)
+    - Symbolic computation and computer algebra systems
+    - Instruction set design and sequence optimization
+    - Loop control flow, branching logic, recursion
+    - Computational complexity analysis
+  apis_services:
+    - OpenAI (GPT-4, embeddings)
+    - Wolfram Alpha API
+    - MIDI / WebAudio for algorithmic music
+    - OAuth2, JWT authentication
+    - Cloudflare (CDN, DNS)
+    - Stripe
+  tools_platforms:
+    - Docker & Docker Compose
+    - GCP (Cloud Run, Cloud Storage)
+    - GitHub Actions (CI/CD)
+    - Jupyter Notebooks
+    - Nginx, Uvicorn
+    - Linux administration
+  databases_orm:
+    - PostgreSQL, SQLite, Redis
+    - SQLAlchemy 2.0, Alembic (async ORM, migrations)
+  testing_quality:
+    - Pytest, mypy, Ruff
+    - Property-based testing (Hypothesis)
+    - Formal verification methods
+    - Unit, integration, and API testing
+  concepts:
+    - Computational theory (Turing completeness, halting problem)
+    - Architecture (separation of mechanism and logical structure)
+    - Algorithm design (numerical methods, symbolic processing)
+    - Technical writing and specification translation
+    - AI/ML fundamentals (neural networks, prompt engineering)
+    - DevOps (containerized CI/CD, health checks, structured logging)
+    - Security (SSL/TLS, input validation, token management)
+  domain_expertise:
+    - Algorithmic music composition (mathematical-musical mapping)
+    - Scientific publishing and technical translation
+    - Computational mathematics (number theory, calculus)
+    - Hardware-software interface design
+
+items:
+  - Python
+  - TypeScript
+  - Rust
+  - FastAPI
+  - React
+  - Docker
+  - PostgreSQL
+  - SQLAlchemy
+  - NumPy
+  - SymPy
+  - OpenAI
+  - OAuth2
+  - JWT
+  - GCP
+  - Redis
+  - LaTeX
+  - Jupyter
+  - Pytest
+  - GitHub Actions
+  - Tailwind CSS
+  - TensorFlow
+  - WebAudio

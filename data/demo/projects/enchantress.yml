@@ -1,0 +1,34 @@
+# Ada's collaboration with Babbage on the Analytical Engine spanned nearly two decades.
+# Babbage called her "The Enchantress of Numbers" for her analytical brilliance. She
+# visited his workshops, attended his Saturday soirées, and maintained extensive
+# correspondence about the Engine's design. She was introduced to Babbage by Mary
+# Somerville, the noted mathematician, in June 1833.
+
+name: "Analytical Engine Collaboration"
+description: >-
+  Long-running collaboration with Charles Babbage on the design and documentation
+  of the Analytical Engine — the first Turing-complete general-purpose computer design.
+  Contributed the definitive published analysis of the Engine's capabilities, debugged
+  instruction sequences, and advocated for the machine's potential to government and
+  academic audiences. Maintained extensive correspondence on architecture, instruction
+  design, and applications.
+link: https://en.wikipedia.org/wiki/Analytical_engine
+status: Ongoing (1833–1852)
+dates: "1833–1852"
+tags:
+  - architecture
+  - collaboration
+  - hardware
+  - advocacy
+  - documentation
+tech_stack:
+  - Analytical Engine design
+  - Difference Engine (prior generation)
+  - Instruction set architecture
+  - Punched card programming (Jacquard loom adaptation)
+  - Technical correspondence
+bullets:
+  - Collaborated with Charles Babbage for nearly two decades on the Analytical Engine, contributing analysis, documentation, and debugging of the machine's instruction sequences.
+  - Produced the only comprehensive published description of the Engine's computational model, bridging Babbage's mechanical vision with a formal logical framework.
+  - Advocated for the Engine's potential to government sponsors and academic audiences, translating complex technical concepts for non-technical stakeholders.
+  - Earned the title "The Enchantress of Numbers" from Babbage for analytical brilliance and the ability to distill his scattered ideas into clear, publishable exposition.

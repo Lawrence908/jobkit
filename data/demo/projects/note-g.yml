@@ -1,0 +1,33 @@
+# Ada's "Note G" from her 1843 translation of Menabrea's paper on the Analytical Engine.
+# Contains the first published algorithm — a method for computing Bernoulli numbers.
+# She supplemented the translation with seven notes (A–G), three times longer than
+# the original paper, demonstrating deep understanding of the machine's capabilities.
+
+name: "Note G: Bernoulli Number Algorithm"
+description: >-
+  Authored the first published computer algorithm as part of extensive annotations
+  to Luigi Menabrea's paper on Charles Babbage's Analytical Engine. Note G described
+  a complete method for computing Bernoulli numbers using the Engine's instruction set,
+  including loop control, variable management, and operation sequencing. The seven
+  notes (A–G) tripled the length of the original paper and became the definitive
+  English-language reference on the Analytical Engine's computational model.
+link: https://www.fourmilab.ch/babbage/sketch.html
+status: Published (1843)
+dates: "1842–1843"
+tags:
+  - algorithms
+  - computation
+  - technical-writing
+  - translation
+  - mathematics
+tech_stack:
+  - Analytical Engine instruction set
+  - Mathematical notation
+  - Bernoulli number theory
+  - Loop/branch control flow
+  - Scientific publishing (Taylor's Scientific Memoirs)
+bullets:
+  - Designed a complete algorithm for computing Bernoulli numbers on the Analytical Engine, including variable cards, operation cards, and loop sequencing — the first published computer program.
+  - Translated Luigi Menabrea's French paper on the Analytical Engine into English, then supplemented it with seven original notes (A–G) totaling three times the length of the source material.
+  - Identified and corrected a critical error in Babbage's own draft of the Bernoulli computation, demonstrating independent mastery of the Engine's instruction model.
+  - Distinguished between the Engine's mechanical layer and its logical architecture, establishing a separation of concerns that anticipated modern software engineering principles.

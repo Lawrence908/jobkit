@@ -1,0 +1,72 @@
+# Demo resume data — Ada Lovelace, reimagined as a modern developer.
+# Historical references: https://en.wikipedia.org/wiki/Ada_Lovelace
+
+contact:
+  name: Ada Lovelace
+  email: ada@analyticalengine.dev
+  phone: ""
+  linkedin: https://www.linkedin.com/in/ada-lovelace
+  website: https://analyticalengine.dev
+  github: https://github.com/enchantress-of-numbers
+
+summary: |
+  Algorithm engineer and full-stack developer with deep expertise in computational
+  theory, symbolic processing, and developer tooling. Experienced in designing
+  instruction sets, optimizing numerical methods, and translating complex technical
+  specifications into clear documentation. Known for identifying applications of
+  computing beyond pure calculation — including music, language, and logic. Combines
+  rigorous mathematical foundations with creative problem solving, an approach best
+  described as "poetical science."
+
+highlights_of_qualifications:
+  - Designed and published the first algorithm for automated computation, demonstrating end-to-end thinking from mathematical theory to machine instruction.
+  - Deep understanding of computational architecture, including memory models, instruction sequencing, and Turing-complete system design.
+  - Skilled technical writer and translator, with experience expanding source material 3x through original analysis and annotation.
+  - Strong mathematical foundation in calculus, number theory, and symbolic logic, applied to practical algorithm optimization.
+  - Recognized ability to communicate complex technical concepts to non-technical stakeholders, including government sponsors and executive leadership.
+  - Collaborative approach to engineering, with experience partnering closely with hardware teams, researchers, and cross-functional partners.
+
+technical_snapshot:
+  languages: [Python, TypeScript, Rust, SQL, LaTeX]
+  frameworks: [FastAPI, React, NumPy, SymPy, TensorFlow]
+  platforms: [Docker, GCP, GitHub Actions, Jupyter, Linux]
+  databases: [PostgreSQL, Redis, SQLite]
+  apis: [OpenAI, Wolfram Alpha, MIDI, WebAudio, OAuth2]
+
+experience:
+  - role: Senior Algorithm Engineer
+    company: Analytical Engine Labs · London, UK
+    dates: "2022 – Present"
+    bullets:
+      - Designed and published the first algorithm for automated computation of Bernoulli numbers, validated through formal proof and simulation testing.
+      - Authored comprehensive technical notes (A through G) that expanded a translated specification 3x with original analysis of the engine's computational model.
+      - Identified that the architecture could process arbitrary symbols — music, text, logic — not just arithmetic, redefining the product roadmap toward general-purpose computing.
+      - Collaborated directly with the founder to debug instruction sequences, catching a critical loop control flow error before integration testing.
+      - Documented the distinction between the system's mechanical layer and its logical architecture, establishing a separation-of-concerns framework adopted across the engineering org.
+  - role: Technical Writer & Research Analyst
+    company: Scientific Memoirs Publishing · London, UK
+    dates: "2020 – 2022"
+    bullets:
+      - Translated and annotated a French technical paper on computational architecture, producing what became the definitive English-language reference for the platform.
+      - Bridged communication between hardware engineering and mathematical research teams, reducing specification ambiguity by standardizing terminology.
+      - Wrote clear explanations of novel computing concepts for government and academic audiences unfamiliar with the technology.
+  - role: Research Associate, Applied Mathematics
+    company: Somerville Computing Institute · London, UK
+    dates: "2018 – 2020"
+    bullets:
+      - Studied advanced calculus, differential equations, and Bernoulli number theory under senior faculty mentorship.
+      - Explored computational models for music composition and nervous system simulation, publishing internal research notes.
+      - Investigated electrical systems and their application to computation, collaborating with the institute's hardware research lab.
+
+education:
+  - school: University College London
+    degree: BSc Mathematics & Computer Science
+    dates: "2018"
+  - school: Somerville Academy
+    degree: Applied Mathematics & Natural Philosophy
+    dates: "2016"
+
+certifications:
+  - Advanced Calculus & Number Theory, UCL Department of Mathematics
+  - Technical Translation Certification, Scientific Memoirs
+  - Electrical Systems Fundamentals, Crosse Research Lab

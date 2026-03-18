@@ -1,0 +1,34 @@
+# Ada's key insight was that the Analytical Engine could process symbols beyond
+# numbers — music, text, logic. She wrote: "The engine might compose elaborate
+# and scientific pieces of music of any degree of complexity or extent." She
+# called her approach "poetical science," integrating imagination with mathematics.
+# She also explored a "calculus of the nervous system" — a mathematical model
+# for how the brain gives rise to thoughts.
+
+name: "Poetical Science: Computing Beyond Calculation"
+description: >-
+  Theoretical framework arguing that computing machines could manipulate any symbols
+  whose relationships can be expressed formally — not just numbers but music, text,
+  and logic. First articulation of general-purpose computing, a century before
+  modern computers existed. Also explored early concepts of computational neuroscience,
+  proposing a "calculus of the nervous system" to model how brains produce thoughts.
+link: https://www.fourmilab.ch/babbage/sketch.html
+status: Published (1843)
+dates: "1843–1844"
+tags:
+  - theory
+  - computation
+  - music
+  - neuroscience
+  - philosophy
+tech_stack:
+  - Symbolic logic
+  - Musical composition theory
+  - Analytical Engine architecture
+  - Mathematical modeling
+  - Nervous system analysis
+bullets:
+  - Articulated the first vision of general-purpose computing, arguing the Analytical Engine could process music, text, and logic — any domain whose relationships can be expressed formally.
+  - Wrote that the Engine "might compose elaborate and scientific pieces of music of any degree of complexity," anticipating algorithmic composition by over a century.
+  - Proposed a "calculus of the nervous system" — a mathematical model for how brains give rise to thoughts and nerves to feelings — an early concept of computational neuroscience.
+  - Established the philosophical position that machines cannot originate thought ("The Engine has no pretensions to originate anything"), later debated by Alan Turing in his 1950 paper on machine intelligence.
