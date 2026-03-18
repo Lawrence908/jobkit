@@ -1,4 +1,4 @@
-"""SQLAlchemy models: Job, Artifact, GoogleToken, InviteCode, Profile, ResumeBase, UserSkills, Project."""
+"""SQLAlchemy models: Job, Artifact, GoogleToken, InviteCode, Profile, ResumeBase, UserSkills, Project, JobStatusEvent, InterviewPrep."""
 from datetime import datetime
 from typing import Any
 
@@ -22,10 +22,20 @@ class Job(Base):
     slug: Mapped[str] = mapped_column(String(256), unique=True, index=True)
     keywords_json: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     source: Mapped[str] = mapped_column(String(128), default="")
+    source_platform: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    work_arrangement: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    applied_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    first_response_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    interview_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    rejected_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    offered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    withdrawn_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
     artifacts: Mapped[list["Artifact"]] = relationship("Artifact", back_populates="job", cascade="all, delete-orphan")
+    status_events: Mapped[list["JobStatusEvent"]] = relationship("JobStatusEvent", back_populates="job", cascade="all, delete-orphan")
+    interview_preps: Mapped[list["InterviewPrep"]] = relationship("InterviewPrep", back_populates="job", cascade="all, delete-orphan")
 
 
 class Artifact(Base):
@@ -120,6 +130,7 @@ class UserSkills(Base):
     user_id: Mapped[str] = mapped_column(String(36), unique=True, nullable=False, index=True)
     categories: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)  # {category_name: [strings]}
     items: Mapped[list[Any] | None] = mapped_column(JSON, nullable=True)  # flat list of keywords
+    skills_spotlight: Mapped[list[Any] | None] = mapped_column(JSON, nullable=True)  # subset shown on profile; null = show all
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
@@ -139,3 +150,34 @@ class Project(Base):
     bullets: Mapped[list[Any] | None] = mapped_column(JSON, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+
+class JobStatusEvent(Base):
+    __tablename__ = "job_status_events"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    job_id: Mapped[int] = mapped_column(ForeignKey("jobs.id", ondelete="CASCADE"), index=True)
+    old_status: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    new_status: Mapped[str] = mapped_column(String(64))
+    changed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    job: Mapped["Job"] = relationship("Job", back_populates="status_events")
+
+
+class InterviewPrep(Base):
+    __tablename__ = "interview_preps"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    job_id: Mapped[int] = mapped_column(ForeignKey("jobs.id", ondelete="CASCADE"), index=True)
+    version: Mapped[int] = mapped_column(Integer, default=1)
+    markdown_text: Mapped[str] = mapped_column(Text)
+    summary_json: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    source_resume_artifact_id: Mapped[int | None] = mapped_column(ForeignKey("artifacts.id", ondelete="SET NULL"), nullable=True)
+    source_cover_letter_artifact_id: Mapped[int | None] = mapped_column(ForeignKey("artifacts.id", ondelete="SET NULL"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    job: Mapped["Job"] = relationship("Job", back_populates="interview_preps")

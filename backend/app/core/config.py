@@ -22,6 +22,11 @@ class Settings(BaseSettings):
     admin_user_id: str | None = Field(default=None, alias="ADMIN_USER_ID")  # Supabase user UUID for admin API access
     cors_extra_origins: str = Field(default="", alias="CORS_EXTRA_ORIGINS")  # comma-separated, e.g. http://100.x.x.x:8123
 
+    # Demo user (read-only account for public demo)
+    demo_user_id: str = Field(default="", alias="DEMO_USER_ID")
+    demo_user_email: str = Field(default="demo@jobkit.app", alias="DEMO_USER_EMAIL")
+    demo_user_password: str = Field(default="", alias="DEMO_USER_PASSWORD")
+
     # Supabase
     supabase_url: str = Field(default="", alias="SUPABASE_URL")
     supabase_anon_key: str = Field(default="", alias="SUPABASE_ANON_KEY")
@@ -115,6 +120,7 @@ class Settings(BaseSettings):
 
     def ensure_dirs(self) -> None:
         self.jobkit_data_dir.mkdir(parents=True, exist_ok=True)
+        (self.jobkit_data_dir / "avatars").mkdir(parents=True, exist_ok=True)
         self.jobkit_jobs_dir.mkdir(parents=True, exist_ok=True)
         self.jobkit_outputs_dir.mkdir(parents=True, exist_ok=True)
 

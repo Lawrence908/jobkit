@@ -2,9 +2,12 @@
 import logging
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+import jwt
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
+from app.core.auth import _decode_supabase_jwt
 from app.core.config import get_settings
 from app.core.logging import setup_logging
 from app.db.session import get_engine, get_session_factory, init_db
@@ -13,8 +16,10 @@ from app.api.routes_register import router as register_router
 from app.api.routes_admin import router as admin_router
 from app.api.routes_status import router as status_router
 from app.api.routes_jobs import router as jobs_router
+from app.api.routes_interview_prep import router as interview_prep_router
 from app.api.routes_truth_store import router as truth_store_router
 from app.api.routes_generate import router as generate_router
+from app.api.routes_stats import router as stats_router
 from app.api.routes_google import router as google_router
 from app.api.routes_profile import router as profile_router
 from app.api.routes_resume import router as resume_router
@@ -62,13 +67,38 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+@app.middleware("http")
+async def demo_write_guard(request: Request, call_next):
+    """Block mutating requests from the demo user (read-only account)."""
+    s = get_settings()
+    if (
+        s.demo_user_id
+        and request.method in ("POST", "PUT", "PATCH", "DELETE")
+        and not request.url.path.startswith("/api/auth/")
+    ):
+        auth_header = request.headers.get("Authorization", "")
+        if auth_header.startswith("Bearer "):
+            try:
+                payload = _decode_supabase_jwt(auth_header[7:], s)
+                if payload.get("sub") == s.demo_user_id:
+                    return JSONResponse(
+                        status_code=403,
+                        content={"detail": "Demo account is read-only"},
+                    )
+            except (jwt.InvalidTokenError, Exception):
+                pass
+    return await call_next(request)
+
+
 app.include_router(status_router)
 app.include_router(auth_router)
 app.include_router(register_router)
 app.include_router(admin_router)
 app.include_router(jobs_router)
+app.include_router(interview_prep_router)
 app.include_router(truth_store_router)
 app.include_router(generate_router)
+app.include_router(stats_router)
 app.include_router(google_router)
 app.include_router(profile_router)
 app.include_router(resume_router)
