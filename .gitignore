@@ -13,3 +13,5 @@ jobs/
 .DS_Store
 .idea/
 .vscode/
+
+archive/data/
