@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Title,
   Stack,
@@ -7,15 +7,40 @@ import {
   Textarea,
   Select,
   Button,
+  FileButton,
   Loader,
   Center,
   Alert,
   Text,
   Anchor,
   Slider,
+  Avatar,
+  Group,
+  Box,
+  Badge,
+  Divider,
+  SimpleGrid,
+  ThemeIcon,
 } from "@mantine/core";
 import { Link } from "react-router-dom";
+import {
+  IconBrandLinkedin,
+  IconBrandGithub,
+  IconMail,
+  IconPhone,
+  IconWorld,
+  IconBriefcase,
+  IconCode,
+  IconFolder,
+  IconArrowRight,
+  IconPencil,
+  IconRefresh,
+  IconPhoto,
+  IconTrash,
+} from "@tabler/icons-react";
+import { useMediaQuery } from "@mantine/hooks";
 import { api } from "../api/client";
+import { flattenSkillPool } from "../utils/skills";
 import {
   LLM_PROVIDER_OPTIONS,
   LLM_MODEL_OPTIONS_BY_PROVIDER,
@@ -42,11 +67,29 @@ export interface Profile {
   google_sheets_spreadsheet_id?: string;
   google_sheets_tab_name?: string;
   google_sheets_url_column?: string;
+  has_avatar?: boolean;
 }
 
 const TONE_OPTIONS = ["neutral", "professional", "conversational"];
 const FOCUS_OPTIONS = ["full-stack", "backend", "frontend", "infrastructure", "mobile"];
 const LENGTH_OPTIONS = ["1 page", "2 pages"];
+
+type ResumeSpotlight = { summary?: string; experience?: unknown[]; education?: unknown[] };
+type SkillsSpotlight = {
+  items?: string[];
+  categories?: Record<string, string[]>;
+  skills_spotlight?: string[] | null;
+};
+
+const EMPTY_RESUME: ResumeSpotlight = {};
+const EMPTY_SKILLS: SkillsSpotlight = {};
+
+function initialsFromName(name: string): string {
+  const parts = (name || "").trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return "?";
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+}
 
 export function ProfilePage() {
   const [profile, setProfile] = useState<Profile | null>(null);
@@ -54,6 +97,119 @@ export function ProfilePage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState(false);
+  const [resumePeek, setResumePeek] = useState<{
+    summary: string;
+    expCount: number;
+    eduCount: number;
+  } | null>(null);
+  const [skillTags, setSkillTags] = useState<string[]>([]);
+  const [skillsCurated, setSkillsCurated] = useState(false);
+  const [projectPeek, setProjectPeek] = useState<Array<{ name: string; description: string }>>([]);
+  const [spotlightLoading, setSpotlightLoading] = useState(true);
+  const [resumePreviewKey, setResumePreviewKey] = useState(0);
+  const [resumePdfUrl, setResumePdfUrl] = useState<string | null>(null);
+  const [resumePdfLoading, setResumePdfLoading] = useState(true);
+  const [resumePdfError, setResumePdfError] = useState(false);
+  const resumePdfObjectUrlRef = useRef<string | null>(null);
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+  const avatarObjectUrlRef = useRef<string | null>(null);
+  const [avatarBusy, setAvatarBusy] = useState(false);
+  const resumeSpotlightRef = useRef<HTMLDivElement>(null);
+  const isSpotlight3Col = useMediaQuery("(min-width: 48em)");
+  const [spotlightRowHeightPx, setSpotlightRowHeightPx] = useState(600);
+
+  useEffect(() => {
+    if (!isSpotlight3Col) return;
+    const node = resumeSpotlightRef.current;
+    if (!node) return;
+    const update = () => {
+      const h = node.getBoundingClientRect().height;
+      if (h >= 240) setSpotlightRowHeightPx(Math.round(h));
+    };
+    update();
+    const ro = new ResizeObserver(() => requestAnimationFrame(update));
+    ro.observe(node);
+    return () => ro.disconnect();
+  }, [
+    isSpotlight3Col,
+    resumePdfUrl,
+    resumePreviewKey,
+    resumePdfLoading,
+    resumePdfError,
+    spotlightLoading,
+    profile,
+  ]);
+
+  useEffect(() => {
+    let cancelled = false;
+    setResumePdfLoading(true);
+    setResumePdfError(false);
+    if (resumePdfObjectUrlRef.current) {
+      URL.revokeObjectURL(resumePdfObjectUrlRef.current);
+      resumePdfObjectUrlRef.current = null;
+    }
+    setResumePdfUrl(null);
+    api
+      .getBlob("/api/resume/preview.pdf")
+      .then((blob) => {
+        if (cancelled) return;
+        const u = URL.createObjectURL(blob);
+        resumePdfObjectUrlRef.current = u;
+        setResumePdfUrl(u);
+      })
+      .catch(() => {
+        if (!cancelled) setResumePdfError(true);
+      })
+      .finally(() => {
+        if (!cancelled) setResumePdfLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [resumePreviewKey]);
+
+  useEffect(
+    () => () => {
+      if (resumePdfObjectUrlRef.current) {
+        URL.revokeObjectURL(resumePdfObjectUrlRef.current);
+        resumePdfObjectUrlRef.current = null;
+      }
+      if (avatarObjectUrlRef.current) {
+        URL.revokeObjectURL(avatarObjectUrlRef.current);
+        avatarObjectUrlRef.current = null;
+      }
+    },
+    [],
+  );
+
+  useEffect(() => {
+    if (!profile?.has_avatar) {
+      if (avatarObjectUrlRef.current) {
+        URL.revokeObjectURL(avatarObjectUrlRef.current);
+        avatarObjectUrlRef.current = null;
+      }
+      setAvatarUrl(null);
+      return;
+    }
+    let cancelled = false;
+    api
+      .getBlob("/api/profile/avatar")
+      .then((blob) => {
+        if (cancelled) return;
+        if (avatarObjectUrlRef.current) {
+          URL.revokeObjectURL(avatarObjectUrlRef.current);
+        }
+        const u = URL.createObjectURL(blob);
+        avatarObjectUrlRef.current = u;
+        setAvatarUrl(u);
+      })
+      .catch(() => {
+        if (!cancelled) setAvatarUrl(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [profile?.has_avatar]);
 
   useEffect(() => {
     api
@@ -71,13 +227,49 @@ export function ProfilePage() {
       .finally(() => setLoading(false));
   }, []);
 
+  useEffect(() => {
+    let cancelled = false;
+    setSpotlightLoading(true);
+    Promise.all([
+      api.get<ResumeSpotlight>("/api/resume").catch(() => EMPTY_RESUME),
+      api.get<SkillsSpotlight>("/api/skills").catch(() => EMPTY_SKILLS),
+      api
+        .get<Array<{ name?: string; description?: string }>>("/api/projects")
+        .catch((): Array<{ name?: string; description?: string }> => []),
+    ]).then(([r, s, projs]) => {
+      if (cancelled) return;
+      const summary = String(r.summary || "").trim();
+      setResumePeek({
+        summary: summary.length > 300 ? `${summary.slice(0, 297)}…` : summary,
+        expCount: Array.isArray(r.experience) ? r.experience.length : 0,
+        eduCount: Array.isArray(r.education) ? r.education.length : 0,
+      });
+      const pool = flattenSkillPool(s.categories || {}, s.items || []);
+      const spot = s.skills_spotlight && s.skills_spotlight.length > 0 ? s.skills_spotlight : null;
+      const tags = spot ? spot.filter((x) => pool.includes(x)) : pool;
+      setSkillTags(tags);
+      setSkillsCurated(!!spot);
+      const list = Array.isArray(projs) ? projs : [];
+      setProjectPeek(
+        list.slice(0, 4).map((p) => ({
+          name: p.name || "Untitled project",
+          description: (p.description || "").trim().slice(0, 160),
+        }))
+      );
+      setSpotlightLoading(false);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const handleSave = async () => {
     if (!profile) return;
     setSaving(true);
     setError("");
     setSuccess(false);
     try {
-      const updated = await api.put<Profile>("/api/profile", {
+      const updated = await api.put<Profile & { has_avatar?: boolean }>("/api/profile", {
         name: profile.name,
         email: profile.email,
         phone: profile.phone,
@@ -106,6 +298,38 @@ export function ProfilePage() {
     }
   };
 
+  const handleAvatarUpload = async (file: File | null) => {
+    if (!file || !profile) return;
+    setAvatarBusy(true);
+    setError("");
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      await api.postForm("/api/profile/avatar", fd);
+      setProfile({ ...profile, has_avatar: true });
+      setSuccess(true);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not upload photo");
+    } finally {
+      setAvatarBusy(false);
+    }
+  };
+
+  const handleAvatarRemove = async () => {
+    if (!profile) return;
+    setAvatarBusy(true);
+    setError("");
+    try {
+      await api.delete("/api/profile/avatar");
+      setProfile({ ...profile, has_avatar: false });
+      setSuccess(true);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not remove photo");
+    } finally {
+      setAvatarBusy(false);
+    }
+  };
+
   if (loading) {
     return (
       <Center py="xl">
@@ -122,36 +346,409 @@ export function ProfilePage() {
     );
   }
 
-  return (
-    <Stack gap="xl" style={{ width: "100%", maxWidth: 560 }}>
-      <Title order={3} className="font-display" style={{ fontWeight: 700 }}>
-        Personalization
-      </Title>
-      <Text size="sm" c="dimmed">
-        Contact and defaults used when generating resumes and cover letters.{" "}
-        <Anchor component={Link} to="/dashboard/profile/resume" size="sm">
-          Resume base
-        </Anchor>
-        {" · "}
-        <Anchor component={Link} to="/dashboard/profile/skills" size="sm">
-          Skills
-        </Anchor>
-        {" · "}
-        <Anchor component={Link} to="/dashboard/profile/projects" size="sm">
-          Projects
-        </Anchor>
-      </Text>
+  const headline =
+    (profile.pitch || "").split(/[.!\n]/)[0]?.trim() ||
+    `${profile.default_focus || "Professional"} · ${profile.default_length || "resume"} defaults`;
 
-      <Paper className="app-card" p="md" withBorder radius="lg">
-        <Stack gap="md">
-          <Text size="sm" fw={600} className="font-display">
-            Contact
+  return (
+    <Stack gap="xl" className="profile-page">
+      <Paper className="app-card profile-hero-card" p={0} withBorder radius="lg">
+        <Box className="profile-hero-cover" />
+        <Box className="profile-hero-body">
+          <Group align="flex-end" justify="space-between" wrap="wrap" gap="md" style={{ minWidth: 0 }}>
+            <Group align="flex-end" gap="lg" wrap="nowrap" style={{ minWidth: 0, flex: 1 }}>
+              <Stack gap={6} align="center" style={{ flexShrink: 0 }}>
+                <Avatar
+                  className="profile-hero-avatar"
+                  size={88}
+                  radius="999"
+                  color="amber"
+                  variant="filled"
+                  src={avatarUrl ?? undefined}
+                >
+                  {!avatarUrl ? initialsFromName(profile.name) : null}
+                </Avatar>
+                <Text size="xs" c="dimmed" ta="center" maw={100} lh={1.35}>
+                  Optional—profile only, not your resume PDF.
+                </Text>
+                <Group gap={4} wrap="nowrap">
+                  <FileButton onChange={handleAvatarUpload} accept="image/png,image/jpeg,image/webp,image/gif">
+                    {(props) => (
+                      <Button
+                        {...props}
+                        variant="light"
+                        color="gray"
+                        size="compact-xs"
+                        leftSection={<IconPhoto size={14} />}
+                        loading={avatarBusy}
+                        disabled={avatarBusy}
+                      >
+                        {profile.has_avatar ? "Replace" : "Add photo"}
+                      </Button>
+                    )}
+                  </FileButton>
+                  {profile.has_avatar && (
+                    <Button
+                      variant="subtle"
+                      color="gray"
+                      size="compact-xs"
+                      leftSection={<IconTrash size={14} />}
+                      loading={avatarBusy}
+                      disabled={avatarBusy}
+                      onClick={handleAvatarRemove}
+                    >
+                      Remove
+                    </Button>
+                  )}
+                </Group>
+              </Stack>
+              <Box style={{ minWidth: 0, paddingBottom: 4 }}>
+                <Title order={2} className="font-display" style={{ fontWeight: 800, lineHeight: 1.15, wordBreak: "break-word" }}>
+                  {profile.name || "Your name"}
+                </Title>
+                <Text className="profile-hero-headline" mt={6}>
+                  {headline}
+                </Text>
+                <Group gap="xs" mt="md" wrap="wrap">
+                  {profile.email && (
+                    <Anchor href={`mailto:${profile.email}`} size="sm" c="dimmed" style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                      <IconMail size={16} style={{ opacity: 0.8 }} />
+                      Email
+                    </Anchor>
+                  )}
+                  {profile.linkedin && (
+                    <Anchor href={profile.linkedin} target="_blank" rel="noreferrer" size="sm" c="dimmed" style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                      <IconBrandLinkedin size={16} style={{ opacity: 0.8 }} />
+                      LinkedIn
+                    </Anchor>
+                  )}
+                  {profile.github && (
+                    <Anchor href={profile.github} target="_blank" rel="noreferrer" size="sm" c="dimmed" style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                      <IconBrandGithub size={16} style={{ opacity: 0.8 }} />
+                      GitHub
+                    </Anchor>
+                  )}
+                  {profile.website && (
+                    <Anchor href={profile.website} target="_blank" rel="noreferrer" size="sm" c="dimmed" style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                      <IconWorld size={16} style={{ opacity: 0.8 }} />
+                      Website
+                    </Anchor>
+                  )}
+                  {profile.phone && (
+                    <Text size="sm" c="dimmed" style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                      <IconPhone size={16} style={{ opacity: 0.8 }} />
+                      {profile.phone}
+                    </Text>
+                  )}
+                </Group>
+              </Box>
+            </Group>
+            <Button onClick={handleSave} loading={saving} color="amber" radius="md" size="sm" style={{ flexShrink: 0 }}>
+              Save profile
+            </Button>
+          </Group>
+        </Box>
+      </Paper>
+
+      {success && (
+        <Alert color="green" variant="light" radius="md">
+          Profile saved.
+        </Alert>
+      )}
+      {error && <Alert color="red">{error}</Alert>}
+
+      <SimpleGrid
+        cols={{ base: 1, sm: 3 }}
+        spacing="md"
+        style={{ alignItems: isSpotlight3Col ? "flex-start" : "stretch" }}
+      >
+        <Paper
+          ref={resumeSpotlightRef}
+          className="app-card profile-spotlight-card"
+          p="lg"
+          withBorder
+          radius="lg"
+          style={{
+            borderColor: "var(--border-muted)",
+            minWidth: 0,
+            display: "flex",
+            flexDirection: "column",
+          }}
+        >
+          <Group justify="space-between" align="flex-start" wrap="nowrap" gap="sm" mb="sm">
+            <Group gap="sm" wrap="nowrap" style={{ minWidth: 0 }}>
+              <ThemeIcon variant="light" color="blue" size="lg" radius="md">
+                <IconBriefcase size={22} />
+              </ThemeIcon>
+              <Box style={{ minWidth: 0 }}>
+                <Text size="xs" c="dimmed" fw={700} tt="uppercase" style={{ letterSpacing: "0.06em" }}>
+                  Resume base
+                </Text>
+                <Text fw={600} className="font-display" mt={2}>
+                  Preview
+                </Text>
+              </Box>
+            </Group>
+            <Button
+              variant="subtle"
+              size="xs"
+              color="gray"
+              leftSection={<IconRefresh size={14} />}
+              onClick={() => setResumePreviewKey((k) => k + 1)}
+              loading={resumePdfLoading}
+            >
+              Refresh
+            </Button>
+          </Group>
+          <Text size="xs" c="dimmed" mb="sm">
+            How your resume base looks as a PDF (same style as generated resumes). Edit the source on Resume base.
           </Text>
+          <Box
+            style={{
+              width: "100%",
+              height: 380,
+              borderRadius: "var(--radius-md)",
+              overflow: "hidden",
+              background: "#525252",
+              border: "1px solid var(--border-muted)",
+              position: "relative",
+            }}
+          >
+            {resumePdfLoading && (
+              <Center h="100%">
+                <Loader color="amber" />
+              </Center>
+            )}
+            {resumePdfError && !resumePdfLoading && (
+              <Center h="100%" p="md">
+                <Stack align="center" gap="sm">
+                  <Text size="sm" c="dimmed" ta="center">
+                    Couldn&apos;t load preview. Try Refresh, or open Resume base below.
+                  </Text>
+                  <Button component={Link} to="/dashboard/profile/resume" size="xs" variant="light" color="amber">
+                    Open Resume base
+                  </Button>
+                </Stack>
+              </Center>
+            )}
+            {resumePdfUrl && !resumePdfLoading && !resumePdfError && (
+              <iframe
+                title="Resume base PDF preview"
+                src={`${resumePdfUrl}#view=FitH`}
+                style={{
+                  width: "100%",
+                  height: "100%",
+                  border: "none",
+                  display: "block",
+                  background: "#fff",
+                }}
+              />
+            )}
+          </Box>
+          <Button
+            component={Link}
+            to="/dashboard/profile/resume"
+            fullWidth
+            mt="md"
+            color="amber"
+            radius="md"
+            leftSection={<IconPencil size={18} />}
+            rightSection={<IconArrowRight size={16} />}
+          >
+            Edit resume base
+          </Button>
+          {!spotlightLoading && resumePeek && (resumePeek.expCount > 0 || resumePeek.eduCount > 0) && (
+            <Text size="xs" c="dimmed" mt="sm" ta="center">
+              {resumePeek.expCount > 0 && `${resumePeek.expCount} role${resumePeek.expCount === 1 ? "" : "s"}`}
+              {resumePeek.expCount > 0 && resumePeek.eduCount > 0 && " · "}
+              {resumePeek.eduCount > 0 && `${resumePeek.eduCount} education`}
+            </Text>
+          )}
+        </Paper>
+
+        <Paper
+          component={Link}
+          to="/dashboard/profile/skills"
+          className="app-card profile-spotlight-card"
+          p="lg"
+          withBorder
+          radius="lg"
+          style={{
+            textDecoration: "none",
+            color: "inherit",
+            borderColor: "var(--border-muted)",
+            minWidth: 0,
+            display: "flex",
+            flexDirection: "column",
+            ...(isSpotlight3Col
+              ? {
+                  height: spotlightRowHeightPx,
+                  maxHeight: spotlightRowHeightPx,
+                  overflow: "hidden",
+                }
+              : {}),
+          }}
+        >
+          <Box style={{ flexShrink: 0 }}>
+            <ThemeIcon variant="light" color="amber" size="lg" radius="md" mb="sm">
+              <IconCode size={22} />
+            </ThemeIcon>
+            <Text size="xs" c="dimmed" fw={700} tt="uppercase" style={{ letterSpacing: "0.06em" }}>
+              Skills
+            </Text>
+            <Text fw={600} className="font-display" mt={4}>
+              Your toolkit
+            </Text>
+            <Text size="xs" c="dimmed" mt={4}>
+              {skillsCurated
+                ? `${skillTags.length} selected for profile — pick more on Skills.`
+                : skillTags.length > 0
+                  ? `All ${skillTags.length} skills — curate on Skills if you want fewer badges.`
+                  : ""}
+            </Text>
+          </Box>
+          <Box
+            style={{
+              flex: isSpotlight3Col ? "1 1 0%" : undefined,
+              minHeight: isSpotlight3Col ? 0 : undefined,
+              maxHeight: isSpotlight3Col ? undefined : 320,
+              marginTop: "var(--mantine-spacing-md)",
+              overflowY: "auto",
+              overflowX: "hidden",
+              WebkitOverflowScrolling: "touch",
+            }}
+          >
+            <Group gap={6} wrap="wrap" align="flex-start">
+              {spotlightLoading ? (
+                <Loader size="sm" color="amber" />
+              ) : skillTags.length === 0 ? (
+                <Text size="xs" c="dimmed">
+                  Add skills for better keyword matching.
+                </Text>
+              ) : (
+                skillTags.map((t) => (
+                  <Badge
+                    key={t}
+                    variant="light"
+                    color="amber"
+                    size="sm"
+                    radius="md"
+                    style={{ maxWidth: "100%", height: "auto", whiteSpace: "normal" }}
+                  >
+                    {t}
+                  </Badge>
+                ))
+              )}
+            </Group>
+          </Box>
+          <Group gap={4} mt="md" c="amber" style={{ flexShrink: 0, marginTop: "auto", paddingTop: "var(--mantine-spacing-md)" }}>
+            <Text size="xs" fw={600}>
+              Manage skills
+            </Text>
+            <IconArrowRight size={14} />
+          </Group>
+        </Paper>
+
+        <Paper
+          component={Link}
+          to="/dashboard/profile/projects"
+          className="app-card profile-spotlight-card"
+          p="lg"
+          withBorder
+          radius="lg"
+          style={{
+            textDecoration: "none",
+            color: "inherit",
+            borderColor: "var(--border-muted)",
+            minWidth: 0,
+            display: "flex",
+            flexDirection: "column",
+            ...(isSpotlight3Col
+              ? {
+                  height: spotlightRowHeightPx,
+                  maxHeight: spotlightRowHeightPx,
+                  overflow: "hidden",
+                }
+              : {}),
+          }}
+        >
+          <Box style={{ flexShrink: 0 }}>
+            <ThemeIcon variant="light" color="grape" size="lg" radius="md" mb="sm">
+              <IconFolder size={22} />
+            </ThemeIcon>
+            <Text size="xs" c="dimmed" fw={700} tt="uppercase" style={{ letterSpacing: "0.06em" }}>
+              Projects
+            </Text>
+            <Text fw={600} className="font-display" mt={4}>
+              Featured work
+            </Text>
+          </Box>
+          <Box
+            style={{
+              flex: isSpotlight3Col ? "1 1 0%" : undefined,
+              minHeight: isSpotlight3Col ? 0 : undefined,
+              maxHeight: isSpotlight3Col ? undefined : 280,
+              marginTop: "var(--mantine-spacing-sm)",
+              overflowY: "auto",
+              overflowX: "hidden",
+            }}
+          >
+            <Stack gap="xs">
+              {spotlightLoading ? (
+                <Loader size="sm" color="amber" />
+              ) : projectPeek.length === 0 ? (
+                <Text size="xs" c="dimmed">
+                  Add projects to highlight in tailored resumes.
+                </Text>
+              ) : (
+                projectPeek.map((p, i) => (
+                  <Box key={`${p.name}-${i}`} className="profile-project-snippet">
+                    <Text size="sm" fw={600} lineClamp={1}>
+                      {p.name}
+                    </Text>
+                    {p.description && (
+                      <Text size="xs" c="dimmed" lineClamp={2} mt={4}>
+                        {p.description}
+                      </Text>
+                    )}
+                  </Box>
+                ))
+              )}
+            </Stack>
+          </Box>
+          <Group gap={4} c="amber" style={{ flexShrink: 0, marginTop: "auto", paddingTop: "var(--mantine-spacing-md)" }}>
+            <Text size="xs" fw={600}>
+              All projects
+            </Text>
+            <IconArrowRight size={14} />
+          </Group>
+        </Paper>
+      </SimpleGrid>
+
+      <Paper className="app-card" p="lg" withBorder radius="lg" style={{ borderColor: "var(--border-muted)" }}>
+        <Text size="xs" c="dimmed" fw={700} tt="uppercase" style={{ letterSpacing: "0.06em" }} mb="md">
+          About
+        </Text>
+        <Textarea
+          label="Headline & pitch"
+          description="Shown in cover letters and as your profile tagline above when you add more detail."
+          value={profile.pitch}
+          onChange={(e) => setProfile({ ...profile, pitch: e.target.value })}
+          placeholder="e.g. Senior backend engineer · Python, distributed systems · Open to remote roles."
+          minRows={4}
+          radius="md"
+        />
+      </Paper>
+
+      <Paper className="app-card" p="lg" withBorder radius="lg">
+        <Divider label="Contact & links" labelPosition="left" mb="lg" />
+        <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
           <TextInput
             label="Name"
             value={profile.name}
             onChange={(e) => setProfile({ ...profile, name: e.target.value })}
             placeholder="Your name"
+            radius="md"
           />
           <TextInput
             label="Email"
@@ -159,83 +756,72 @@ export function ProfilePage() {
             value={profile.email}
             onChange={(e) => setProfile({ ...profile, email: e.target.value })}
             placeholder="you@example.com"
+            radius="md"
           />
           <TextInput
             label="Phone"
             value={profile.phone}
             onChange={(e) => setProfile({ ...profile, phone: e.target.value })}
             placeholder="+1 234 567 8900"
+            radius="md"
           />
           <TextInput
             label="LinkedIn"
             value={profile.linkedin}
             onChange={(e) => setProfile({ ...profile, linkedin: e.target.value })}
             placeholder="https://linkedin.com/in/..."
+            radius="md"
           />
           <TextInput
             label="Website"
             value={profile.website}
             onChange={(e) => setProfile({ ...profile, website: e.target.value })}
             placeholder="https://yoursite.com"
+            radius="md"
           />
           <TextInput
             label="GitHub"
             value={profile.github}
             onChange={(e) => setProfile({ ...profile, github: e.target.value })}
             placeholder="https://github.com/..."
+            radius="md"
           />
-        </Stack>
+        </SimpleGrid>
       </Paper>
 
-      <Paper className="app-card" p="md" withBorder radius="lg">
-        <Stack gap="md">
-          <Text size="sm" fw={600} className="font-display">
-            Pitch
-          </Text>
-          <Textarea
-            label="Short pitch (used in cover letters)"
-            value={profile.pitch}
-            onChange={(e) => setProfile({ ...profile, pitch: e.target.value })}
-            placeholder="A sentence or two about your background and what you're looking for."
-            minRows={3}
-          />
-        </Stack>
-      </Paper>
-
-      <Paper className="app-card" p="md" withBorder radius="lg">
-        <Stack gap="md">
-          <Text size="sm" fw={600} className="font-display">
-            Defaults for generation
-          </Text>
+      <Paper className="app-card" p="lg" withBorder radius="lg">
+        <Divider label="Generation defaults" labelPosition="left" mb="lg" />
+        <SimpleGrid cols={{ base: 1, sm: 3 }} spacing="md">
           <Select
             label="Default tone"
             data={TONE_OPTIONS}
             value={profile.default_tone}
             onChange={(v) => v && setProfile({ ...profile, default_tone: v })}
+            radius="md"
           />
           <Select
             label="Default focus"
             data={FOCUS_OPTIONS}
             value={profile.default_focus}
             onChange={(v) => v && setProfile({ ...profile, default_focus: v })}
+            radius="md"
           />
           <Select
             label="Default length"
             data={LENGTH_OPTIONS}
             value={profile.default_length}
             onChange={(v) => v && setProfile({ ...profile, default_length: v })}
+            radius="md"
           />
-        </Stack>
+        </SimpleGrid>
       </Paper>
 
-      <Paper className="app-card" p="md" withBorder radius="lg">
+      <Paper className="app-card" p="lg" withBorder radius="lg">
+        <Divider label="LLM for generation" labelPosition="left" mb="md" />
+        <Text size="xs" c="dimmed" mb="lg">
+          Provider and API key for resume/cover letter generation. Stored in your profile.
+        </Text>
         <Stack gap="md">
-          <Text size="sm" fw={600} className="font-display">
-            LLM for generation
-          </Text>
-          <Text size="xs" c="dimmed">
-            Choose provider and API key for resume/cover letter generation. Stored in your profile.
-          </Text>
           <Select
             label="Provider"
             data={LLM_PROVIDER_OPTIONS.map((o) => ({ value: o.value, label: o.label }))}
@@ -250,6 +836,7 @@ export function ProfilePage() {
                 llm_model: currentInList ? profile.llm_model : DEFAULT_MODEL_BY_PROVIDER[provider],
               });
             }}
+            radius="md"
           />
           <TextInput
             label="API key"
@@ -264,6 +851,7 @@ export function ProfilePage() {
                   : "sk-or-v1-..."
             }
             description="Your key is stored in your profile and used only for your generations."
+            radius="md"
           />
           <Select
             label="Model"
@@ -273,6 +861,7 @@ export function ProfilePage() {
             }))}
             value={profile.llm_model || DEFAULT_MODEL_BY_PROVIDER[(profile.llm_provider || "openrouter") as LLMProvider]}
             onChange={(v) => v && setProfile({ ...profile, llm_model: v })}
+            radius="md"
           />
           <Stack gap={4}>
             <Text size="sm" fw={500}>
@@ -293,20 +882,19 @@ export function ProfilePage() {
         </Stack>
       </Paper>
 
-      <Paper className="app-card" p="md" withBorder radius="lg">
+      <Paper className="app-card" p="lg" withBorder radius="lg">
+        <Divider label="Google Drive & Sheets" labelPosition="left" mb="md" />
+        <Text size="xs" c="dimmed" mb="lg">
+          Connect Google in the header, then set these to sync jobs to your folder and tracker sheet.
+        </Text>
         <Stack gap="md">
-          <Text size="sm" fw={600} className="font-display">
-            Google Drive &amp; Sheets (optional)
-          </Text>
-          <Text size="xs" c="dimmed">
-            Connect Google in the header, then set these to sync jobs to your own folder and tracker. Leave blank to never sync to Sheets.
-          </Text>
           <TextInput
             label="Drive root folder ID"
             value={profile.google_drive_root_folder_id ?? ""}
             onChange={(e) => setProfile({ ...profile, google_drive_root_folder_id: e.target.value })}
             placeholder="e.g. 1ABC...xyz (from folder URL)"
             description="Uploads go under this folder. Empty = create a JobKit folder in Drive."
+            radius="md"
           />
           <TextInput
             label="Sheets spreadsheet ID"
@@ -314,28 +902,32 @@ export function ProfilePage() {
             onChange={(e) => setProfile({ ...profile, google_sheets_spreadsheet_id: e.target.value })}
             placeholder="e.g. 1tBEe... (from spreadsheet URL)"
             description="Only used when set. Job updates sync to this sheet."
+            radius="md"
           />
-          <TextInput
-            label="Sheet tab name"
-            value={profile.google_sheets_tab_name ?? ""}
-            onChange={(e) => setProfile({ ...profile, google_sheets_tab_name: e.target.value })}
-            placeholder="e.g. Job Applications"
-          />
-          <TextInput
-            label="Job URL column name"
-            value={profile.google_sheets_url_column ?? ""}
-            onChange={(e) => setProfile({ ...profile, google_sheets_url_column: e.target.value })}
-            placeholder="Job URL (default)"
-          />
+          <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
+            <TextInput
+              label="Sheet tab name"
+              value={profile.google_sheets_tab_name ?? ""}
+              onChange={(e) => setProfile({ ...profile, google_sheets_tab_name: e.target.value })}
+              placeholder="e.g. Job Applications"
+              radius="md"
+            />
+            <TextInput
+              label="Job URL column name"
+              value={profile.google_sheets_url_column ?? ""}
+              onChange={(e) => setProfile({ ...profile, google_sheets_url_column: e.target.value })}
+              placeholder="Job URL (default)"
+              radius="md"
+            />
+          </SimpleGrid>
         </Stack>
       </Paper>
 
-      {error && <Alert color="red">{error}</Alert>}
-      {success && <Alert color="green">Profile saved.</Alert>}
-
-      <Button onClick={handleSave} loading={saving} color="amber" variant="filled">
-        Save profile
-      </Button>
+      <Group justify="flex-end">
+        <Button onClick={handleSave} loading={saving} color="amber" radius="md" size="md">
+          Save profile
+        </Button>
+      </Group>
     </Stack>
   );
 }
