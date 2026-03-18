@@ -16,12 +16,14 @@ router = APIRouter(prefix="/api/skills", tags=["skills"])
 class SkillsUpdate(BaseModel):
     categories: dict[str, list[str]] | None = None
     items: list[str] | None = None
+    skills_spotlight: list[str] | None = None
 
 
 def _row_to_skills(row: UserSkills) -> dict:
     return {
         "categories": row.categories or {},
         "items": row.items or [],
+        "skills_spotlight": row.skills_spotlight if row.skills_spotlight else None,
     }
 
 
@@ -34,11 +36,15 @@ def read_skills(
         from app.services.truth_store import get_skills
         raw = get_skills()
         if isinstance(raw, dict):
-            return {"categories": raw.get("categories") or {}, "items": raw.get("items") or []}
-        return {"categories": {}, "items": raw if isinstance(raw, list) else []}
+            return {
+                "categories": raw.get("categories") or {},
+                "items": raw.get("items") or [],
+                "skills_spotlight": None,
+            }
+        return {"categories": {}, "items": raw if isinstance(raw, list) else [], "skills_spotlight": None}
     row = db.query(UserSkills).filter(UserSkills.user_id == user_id).first()
     if not row:
-        row = UserSkills(user_id=user_id, categories={}, items=[])
+        row = UserSkills(user_id=user_id, categories={}, items=[], skills_spotlight=None)
         db.add(row)
         db.commit()
         db.refresh(row)
@@ -56,15 +62,31 @@ def update_skills(
     if not get_settings().use_postgres():
         from fastapi import HTTPException
         raise HTTPException(status_code=501, detail="Skills are file-based when not using Postgres. Set DATABASE_URL to use DB.")
+    payload = data.model_dump(exclude_unset=True)
+
+    def _norm_spotlight(v: list[str] | None) -> list[str] | None:
+        if not v:
+            return None
+        return v
+
     row = db.query(UserSkills).filter(UserSkills.user_id == user_id).first()
     if not row:
-        row = UserSkills(user_id=user_id, categories=data.categories or {}, items=data.items or [])
+        row = UserSkills(
+            user_id=user_id,
+            categories=payload.get("categories") or {},
+            items=payload.get("items") or [],
+            skills_spotlight=None,
+        )
+        if "skills_spotlight" in payload:
+            row.skills_spotlight = _norm_spotlight(payload["skills_spotlight"])
         db.add(row)
     else:
-        if data.categories is not None:
-            row.categories = data.categories
-        if data.items is not None:
-            row.items = data.items
+        if "categories" in payload:
+            row.categories = payload["categories"]
+        if "items" in payload:
+            row.items = payload["items"]
+        if "skills_spotlight" in payload:
+            row.skills_spotlight = _norm_spotlight(payload["skills_spotlight"])
         db.add(row)
     db.commit()
     db.refresh(row)

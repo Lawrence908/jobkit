@@ -15,7 +15,7 @@ from app.core.config import get_settings
 from app.db.session import get_db
 from app.db.models import Job, Artifact, GoogleToken
 from app.services.tailor import generate_artifacts, write_generated_artifacts, select_projects
-from app.services.render import render_job_pdfs
+from app.services.render import render_job_pdfs, md_to_html, render_pdf, _CSS_PATH as RENDER_CSS_PATH
 from app.services.google_auth import get_credentials
 from app.services.google_drive import upload_file, ensure_folder
 from app.services.google_sheets import default_column_map, get_header_row, get_row, sync_job_to_sheet
@@ -58,6 +58,45 @@ def _build_sheet_column_map(settings) -> dict:
     if not column_map:
         column_map = default_column_map()
     return column_map
+
+
+def _read_artifact_content(art, storage_svc, jobs_dir: Path, outputs_dir: Path) -> str | None:
+    """Read artifact file content as string. Returns None on failure."""
+    if storage_svc.is_storage_key(art.path):
+        try:
+            data = storage_svc.download_bytes(art.path)
+            return data.decode("utf-8")
+        except Exception:
+            return None
+    if art.path.startswith("outputs/"):
+        base = outputs_dir
+        rel = art.path.replace("outputs/", "", 1)
+    else:
+        base = jobs_dir
+        rel = art.path
+    path = ensure_safe_relative_path(base, *rel.split("/"))
+    if not path.exists():
+        return None
+    try:
+        return path.read_text(encoding="utf-8")
+    except Exception:
+        return None
+
+
+def _render_md_to_pdf_and_upload(md_content: str, creds, folder_id: str, pdf_name: str, css_path: Path | None):
+    """Render markdown to PDF, upload to Drive. Returns (drive_file_id, drive_link) or (None, None)."""
+    import tempfile
+    try:
+        html_content = md_to_html(md_content)
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
+            try:
+                render_pdf(html_content, Path(tmp.name), css_path=css_path)
+                fid, link = upload_file(creds, Path(tmp.name), pdf_name, "application/pdf", folder_id)
+                return (fid, link)
+            finally:
+                Path(tmp.name).unlink(missing_ok=True)
+    except Exception:
+        return (None, None)
 
 
 class GenerateRequest(BaseModel):
@@ -360,9 +399,23 @@ def upload_and_log(
     cover_link = ""
     notes_link = ""
     import tempfile
+
     for art in artifacts:
         fid, link = None, None
-        if storage_svc.is_storage_key(art.path):
+        # For resume and cover letter, always upload PDF to Drive so the sheet gets PDF links (not .md).
+        if art.type == "resume_md":
+            md_content = _read_artifact_content(art, storage_svc, jobs_dir, outputs_dir)
+            if md_content is not None:
+                fid, link = _render_md_to_pdf_and_upload(
+                    md_content, creds, folder_id, "resume.pdf", RENDER_CSS_PATH,
+                )
+        elif art.type == "cover_letter_md":
+            md_content = _read_artifact_content(art, storage_svc, jobs_dir, outputs_dir)
+            if md_content is not None:
+                fid, link = _render_md_to_pdf_and_upload(
+                    md_content, creds, folder_id, "cover_letter.pdf", RENDER_CSS_PATH,
+                )
+        elif storage_svc.is_storage_key(art.path):
             try:
                 data = storage_svc.download_bytes(art.path)
                 name = art.path.split("/")[-1]

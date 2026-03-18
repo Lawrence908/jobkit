@@ -1,12 +1,14 @@
 """Personalization profile API (contact, pitch, defaults for resume/cover)."""
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
+from fastapi.responses import Response
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.core.auth import get_current_user, verify_csrf
 from app.db.session import get_db
+from app.services.avatar_store import delete_avatar, read_avatar_bytes, save_avatar_from_upload
 from app.services.profile_store import get_profile, save_profile
 
 router = APIRouter(prefix="/api/profile", tags=["profile"])
@@ -56,3 +58,45 @@ def update_profile(
             profile[k] = v
     save_profile(user_id, profile, db)
     return get_profile(user_id, db)
+
+
+@router.get("/avatar")
+def get_profile_avatar(
+    user_id: Annotated[str, Depends(get_current_user)],
+):
+    """Private JPEG for the signed-in user (profile UI only—not auto-injected into resume PDFs)."""
+    data = read_avatar_bytes(user_id)
+    if not data:
+        raise HTTPException(status_code=404, detail="No avatar")
+    return Response(
+        content=data,
+        media_type="image/jpeg",
+        headers={"Cache-Control": "private, max-age=86400"},
+    )
+
+
+@router.post("/avatar")
+async def upload_profile_avatar(
+    request: Request,
+    user_id: Annotated[str, Depends(get_current_user)],
+    file: UploadFile = File(...),
+):
+    verify_csrf(request)
+    raw = await file.read()
+    if not raw:
+        raise HTTPException(status_code=400, detail="Empty file")
+    try:
+        save_avatar_from_upload(user_id, raw)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return {"ok": True, "has_avatar": True}
+
+
+@router.delete("/avatar")
+def delete_profile_avatar(
+    request: Request,
+    user_id: Annotated[str, Depends(get_current_user)],
+):
+    verify_csrf(request)
+    delete_avatar(user_id)
+    return {"ok": True, "has_avatar": False}

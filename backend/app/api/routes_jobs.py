@@ -1,4 +1,5 @@
 """Job CRUD and ingestion."""
+import logging
 import shutil
 from typing import Annotated
 
@@ -15,8 +16,10 @@ from app.services.ingest import ingest_job, job_json_to_markdown, save_job_to_di
 from app.services import storage as storage_svc
 from app.services.extract import extract_keywords, extract_ats_signals
 from app.utils.files import job_slug, ensure_safe_relative_path
+from app.services.job_status_service import log_status_change, update_timestamp_fields
 
 router = APIRouter(prefix="/api/jobs", tags=["jobs"])
+logger = logging.getLogger(__name__)
 
 # Max length for description preview on list/dashboard cards
 DESCRIPTION_PREVIEW_LENGTH = 220
@@ -83,6 +86,9 @@ class UpdateJobRequest(BaseModel):
     company: str | None = None
     role: str | None = None
     location: str | None = None
+    source_platform: str | None = None
+    work_arrangement: str | None = None
+    raw_body: str | None = None
 
 
 class UpdateDescriptionRequest(BaseModel):
@@ -113,6 +119,14 @@ def _job_to_response(job: Job) -> dict:
         "slug": job.slug,
         "keywords": job.keywords_json or [],
         "source": job.source,
+        "source_platform": job.source_platform,
+        "work_arrangement": job.work_arrangement,
+        "applied_at": job.applied_at.isoformat() if job.applied_at else None,
+        "first_response_at": job.first_response_at.isoformat() if job.first_response_at else None,
+        "interview_at": job.interview_at.isoformat() if job.interview_at else None,
+        "rejected_at": job.rejected_at.isoformat() if job.rejected_at else None,
+        "offered_at": job.offered_at.isoformat() if job.offered_at else None,
+        "withdrawn_at": job.withdrawn_at.isoformat() if job.withdrawn_at else None,
         "created_at": job.created_at.isoformat() if job.created_at else None,
         "updated_at": job.updated_at.isoformat() if job.updated_at else None,
     }
@@ -287,12 +301,9 @@ def _load_job_json(job: Job) -> dict | None:
         return None
 
 
-def _description_stats_from_disk(job: Job) -> dict:
-    """Load job.json and return description_word_count and description_preview for UI."""
-    job_json = _load_job_json(job)
-    if not job_json:
-        return {}
-    raw = (job_json.get("raw_body") or "").strip()
+def _description_stats_from_raw_body(raw: str) -> dict:
+    """Stats for API responses from an in-memory description (avoids stale storage reads)."""
+    raw = (raw or "").strip()
     word_count = len(raw.split()) if raw else 0
     preview = (raw[:400] + "…") if len(raw) > 400 else raw
     return {
@@ -300,6 +311,52 @@ def _description_stats_from_disk(job: Job) -> dict:
         "description_preview": preview or None,
         "raw_body": raw or None,
     }
+
+
+def _description_stats_from_disk(job: Job) -> dict:
+    """Load job.json and return description_word_count and description_preview for UI."""
+    job_json = _load_job_json(job)
+    if not job_json:
+        return {}
+    raw = (job_json.get("raw_body") or "").strip()
+    return _description_stats_from_raw_body(raw)
+
+
+def _persist_job_raw_body(job: Job, raw_body: str) -> str:
+    """Write raw_body to job.json, refresh keywords, persist to disk and storage. Returns stripped body."""
+    raw_body = (raw_body or "").strip()
+    job_json = _load_job_json(job)
+    if job_json is None:
+        job_json = {
+            "url": job.url,
+            "company": job.company,
+            "role": job.role,
+            "location": job.location,
+            "raw_body": "",
+            "keywords": [],
+            "ats": {},
+            "source": job.source or "",
+        }
+    settings = get_settings()
+    job_dir = ensure_safe_relative_path(settings.jobkit_jobs_dir, job.slug)
+    job_dir.mkdir(parents=True, exist_ok=True)
+    job_json["raw_body"] = raw_body
+    combined = f"{job.role or ''}\n{raw_body}"
+    job_json["keywords"] = extract_keywords(combined)
+    job_json["ats"] = extract_ats_signals(combined)
+    job_md = job_json_to_markdown(job_json)
+    save_job_to_disk(job.slug, job_json, job_md)
+    if storage_svc.use_storage() and job.user_id:
+        try:
+            storage_svc.upload_job_files(job.user_id, job.slug, job_json, job_md)
+        except Exception:
+            logger.exception(
+                "upload_job_files failed after description update; disk copy is updated (user_id=%s slug=%s)",
+                job.user_id,
+                job.slug,
+            )
+    job.keywords_json = job_json["keywords"]
+    return raw_body
 
 
 @router.get("/{job_id}")
@@ -323,40 +380,13 @@ def update_job_description(
     user_id: Annotated[str, Depends(get_current_user)],
 ):
     verify_csrf(request)
-    import json
     job = _get_user_job(db, user_id, job_id)
-    job_json = _load_job_json(job)
-    if job_json is None:
-        job_json = {
-            "url": job.url,
-            "company": job.company,
-            "role": job.role,
-            "location": job.location,
-            "raw_body": "",
-            "keywords": [],
-            "ats": {},
-            "source": job.source or "",
-        }
-    settings = get_settings()
-    job_dir = ensure_safe_relative_path(settings.jobkit_jobs_dir, job.slug)
-    job_dir.mkdir(parents=True, exist_ok=True)
-    raw_body = (data.raw_body or "").strip()
-    job_json["raw_body"] = raw_body
-    combined = f"{job.role or ''}\n{raw_body}"
-    job_json["keywords"] = extract_keywords(combined)
-    job_json["ats"] = extract_ats_signals(combined)
-    job_md = job_json_to_markdown(job_json)
-    save_job_to_disk(job.slug, job_json, job_md)
-    if storage_svc.use_storage() and job.user_id:
-        try:
-            storage_svc.upload_job_files(job.user_id, job.slug, job_json, job_md)
-        except Exception:
-            pass
-    job.keywords_json = job_json["keywords"]
+    saved = _persist_job_raw_body(job, data.raw_body)
     db.commit()
     db.refresh(job)
     out = _job_to_response(job)
-    out.update(_description_stats_from_disk(job))
+    # Echo saved text — re-reading storage can return stale data if upload failed or is eventually consistent
+    out.update(_description_stats_from_raw_body(saved))
     return out
 
 
@@ -383,9 +413,13 @@ def _sync_job_to_sheet_if_configured(job: Job, db: Session) -> None:
     resume_link = cover_link = notes_link = ""
     for art in db.query(Artifact).filter(Artifact.job_id == job.id):
         if art.drive_link:
-            if art.type in ("resume_pdf", "resume_md"):
+            if art.type == "resume_pdf":
                 resume_link = art.drive_link
-            elif art.type in ("cover_letter_pdf", "cover_letter_md"):
+            elif art.type == "resume_md" and not resume_link:
+                resume_link = art.drive_link
+            elif art.type == "cover_letter_pdf":
+                cover_link = art.drive_link
+            elif art.type == "cover_letter_md" and not cover_link:
                 cover_link = art.drive_link
             elif art.type == "notes_md":
                 notes_link = art.drive_link
@@ -409,6 +443,39 @@ def _sync_job_to_sheet_if_configured(job: Job, db: Session) -> None:
         pass
 
 
+def _remove_job_from_sheet_if_configured(job: Job, db: Session) -> None:
+    """Delete this job's row from the user's Google Sheet so the sheet mirrors the app."""
+    if not job.user_id:
+        return
+    from app.services.google_auth import get_credentials
+    from app.services.google_sheets import delete_job_row_from_sheet
+    from app.services.profile_store import get_profile
+
+    profile = get_profile(job.user_id, db)
+    spreadsheet_id = (profile.get("google_sheets_spreadsheet_id") or "").strip()
+    sheet_name = (profile.get("google_sheets_tab_name") or "").strip()
+    if not spreadsheet_id or not sheet_name:
+        return
+    url_column = (profile.get("google_sheets_url_column") or "").strip() or "Job URL"
+    job_url = (job.url or "").strip()
+    if not job_url:
+        return
+    creds = get_credentials(db, user_id=job.user_id)
+    if not creds:
+        return
+    from googleapiclient.discovery import build
+
+    service = build("sheets", "v4", credentials=creds)
+    try:
+        delete_job_row_from_sheet(
+            service, spreadsheet_id, sheet_name, url_column, job_url
+        )
+    except Exception as e:
+        logger.warning(
+            "Could not remove job from Google Sheet (job_id=%s): %s", job.id, e
+        )
+
+
 @router.patch("/{job_id}")
 def update_job(
     job_id: int,
@@ -419,8 +486,12 @@ def update_job(
 ):
     verify_csrf(request)
     job = _get_user_job(db, user_id, job_id)
+    old_status = job.status
     if data.status is not None:
         job.status = data.status
+        if job.user_id:
+            log_status_change(db, user_id, job_id, old_status, job.status)
+            update_timestamp_fields(db, job, job.status)
     if data.rejection_reason is not None:
         job.rejection_reason = data.rejection_reason
     if data.company is not None:
@@ -429,10 +500,21 @@ def update_job(
         job.role = data.role
     if data.location is not None:
         job.location = data.location
+    if data.source_platform is not None:
+        job.source_platform = data.source_platform
+    if data.work_arrangement is not None:
+        job.work_arrangement = data.work_arrangement
+    if data.raw_body is not None:
+        saved_desc = _persist_job_raw_body(job, data.raw_body)
+    else:
+        saved_desc = None
     db.commit()
     db.refresh(job)
     _sync_job_to_sheet_if_configured(job, db)
-    return _job_to_response(job)
+    out = _job_to_response(job)
+    if saved_desc is not None:
+        out.update(_description_stats_from_raw_body(saved_desc))
+    return out
 
 
 @router.post("/{job_id}/extract")
@@ -491,6 +573,7 @@ def delete_job(
     verify_csrf(request)
     job = _get_user_job(db, user_id, job_id)
     slug = job.slug
+    _remove_job_from_sheet_if_configured(job, db)
     db.delete(job)
     db.commit()
     job_dir = ensure_safe_relative_path(get_settings().jobkit_jobs_dir, slug)

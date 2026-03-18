@@ -1,15 +1,19 @@
-"""Auth routes: me, legacy login/logout (kept for backward compat during migration)."""
+"""Auth routes: me, demo login, legacy login/logout."""
 import hashlib
 import hmac
+import logging
 import secrets
 import time
 from urllib.parse import urlparse
 
-from fastapi import APIRouter, Depends, Response
+import httpx
+from fastapi import APIRouter, Depends, HTTPException, Response
 from pydantic import BaseModel
 
 from app.core.auth import get_current_user
 from app.core.config import get_settings
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
@@ -20,12 +24,48 @@ CSRF_COOKIE = "jobkit_csrf"
 class MeResponse(BaseModel):
     user_id: str
     email: str | None = None
+    is_demo: bool = False
 
 
 @router.get("/me", response_model=MeResponse)
 def me(user_id: str = Depends(get_current_user)):
     """Return current user info. Works for both JWT and legacy session auth."""
-    return MeResponse(user_id=user_id)
+    settings = get_settings()
+    is_demo = bool(settings.demo_user_id and user_id == settings.demo_user_id)
+    return MeResponse(user_id=user_id, is_demo=is_demo)
+
+
+@router.post("/demo-login")
+def demo_login():
+    """Sign in as the read-only demo user. Returns Supabase session tokens."""
+    settings = get_settings()
+    if not settings.demo_user_email or not settings.demo_user_password:
+        raise HTTPException(status_code=404, detail="Demo login not configured")
+    if not settings.supabase_url or not settings.supabase_anon_key:
+        raise HTTPException(status_code=503, detail="Supabase not configured")
+
+    url = f"{settings.supabase_url.rstrip('/')}/auth/v1/token?grant_type=password"
+    headers = {
+        "apikey": settings.supabase_anon_key,
+        "Content-Type": "application/json",
+    }
+    payload = {
+        "email": settings.demo_user_email,
+        "password": settings.demo_user_password,
+    }
+
+    try:
+        with httpx.Client(timeout=15.0) as client:
+            resp = client.post(url, json=payload, headers=headers)
+            resp.raise_for_status()
+    except httpx.HTTPStatusError as e:
+        logger.warning("Demo login failed: %s", e.response.text)
+        raise HTTPException(status_code=502, detail="Demo login failed")
+    except httpx.RequestError:
+        logger.exception("Demo login request error")
+        raise HTTPException(status_code=502, detail="Auth service unavailable")
+
+    return resp.json()
 
 
 # ---------------------------------------------------------------------------
