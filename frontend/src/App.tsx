@@ -13,6 +13,7 @@ import { ResumePage } from "./pages/ResumePage";
 import { SkillsPage } from "./pages/SkillsPage";
 import { ProjectsPage } from "./pages/ProjectsPage";
 import { SpreadsheetPage } from "./pages/SpreadsheetPage";
+import { StatsPage } from "./pages/StatsPage";
 import { AdminPage } from "./pages/AdminPage";
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -61,6 +62,7 @@ function AppRoutes() {
         <Route path="jobs/new" element={<NewJobPage />} />
         <Route path="jobs/:jobId" element={<JobDetailPage />} />
         <Route path="tracker" element={<SpreadsheetPage />} />
+        <Route path="stats" element={<StatsPage />} />
         <Route path="profile" element={<ProfilePage />} />
         <Route path="profile/resume" element={<ResumePage />} />
         <Route path="profile/skills" element={<SkillsPage />} />

@@ -54,8 +54,59 @@ async function request<T>(
   return res.json() as Promise<T>;
 }
 
+async function getBlob(path: string): Promise<Blob> {
+  const base = getApiBase();
+  const url = path.startsWith("http") ? path : `${base}${path}`;
+  const headers: Record<string, string> = {};
+  const token = await getAccessToken();
+  if (token) {
+    headers.Authorization = `Bearer ${token}`;
+  }
+  const res = await fetch(url, { credentials: "include", headers });
+  if (res.status === 401) {
+    await supabase.auth.signOut();
+    window.location.href = "/login";
+    throw new Error("Unauthorized");
+  }
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: res.statusText }));
+    throw new Error(typeof err.detail === "string" ? err.detail : "Request failed");
+  }
+  return res.blob();
+}
+
+async function postForm<T = unknown>(path: string, formData: FormData): Promise<T> {
+  const base = getApiBase();
+  const url = path.startsWith("http") ? path : `${base}${path}`;
+  const headers: Record<string, string> = {};
+  const token = await getAccessToken();
+  if (token) {
+    headers.Authorization = `Bearer ${token}`;
+  } else {
+    const csrf = getCsrfToken();
+    if (csrf) headers["X-CSRF-Token"] = csrf;
+  }
+  const res = await fetch(url, {
+    method: "POST",
+    body: formData,
+    credentials: "include",
+    headers,
+  });
+  if (res.status === 401) {
+    await supabase.auth.signOut();
+    window.location.href = "/login";
+    throw new Error("Unauthorized");
+  }
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: res.statusText }));
+    throw new Error(typeof err.detail === "string" ? err.detail : "Upload failed");
+  }
+  return res.json() as Promise<T>;
+}
+
 export const api = {
   get: <T>(path: string) => request<T>(path, { method: "GET" }),
+  getBlob,
   post: <T>(path: string, body?: unknown) =>
     request<T>(path, {
       method: "POST",
@@ -66,6 +117,7 @@ export const api = {
   put: <T>(path: string, body: unknown) =>
     request<T>(path, { method: "PUT", body: JSON.stringify(body) }),
   delete: (path: string) => request<undefined>(path, { method: "DELETE" }),
+  postForm,
 };
 
 export function getCsrfToken(): string {
