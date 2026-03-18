@@ -1,17 +1,20 @@
 #!/usr/bin/env python3
-"""Ingest data/resume_base.yml, data/skills.yml, and data/projects/*.yml into a user in Postgres.
+"""Ingest profile, resume, skills, projects, and jobs into a user in Postgres.
 
 Usage:
     cd backend && python -m scripts.ingest_data_to_user 903dc38c-ec0b-4967-bf87-cab3bfc7be74
 
 Optional:
     python -m scripts.ingest_data_to_user <user_id> [--data-dir PATH]
+    python -m scripts.ingest_data_to_user <user_id> --project-yml path/to/project.yml
+      (ingest only that project; paths are relative to your current working directory)
 
-Requires DATABASE_URL (or Postgres env) and use_postgres=True. Only *.yml project files are ingested; .md files are skipped.
+Requires DATABASE_URL (or Postgres env) and use_postgres=True.
 """
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 from pathlib import Path
 from typing import Any
@@ -22,8 +25,9 @@ import yaml
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from app.core.config import get_settings
-from app.db.models import Project, ResumeBase, UserSkills
+from app.db.models import Job, Project, ResumeBase, UserSkills
 from app.db.session import get_engine, get_session_factory, init_db
+from app.services.profile_store import save_profile
 from app.services.resume_base_store import _default_resume_base, save_resume_base
 
 
@@ -101,6 +105,18 @@ def run(user_id: str, data_dir: Path) -> None:
     db = session_factory()
 
     try:
+        # Profile
+        profile_path = data_dir / "profile.yml"
+        if profile_path.exists():
+            profile_data = _load_yaml(profile_path)
+            if isinstance(profile_data, dict) and profile_data:
+                save_profile(user_id, profile_data, db)
+                print(f"  profile: ingested from {profile_path.name}")
+            else:
+                print(f"  profile: skipped (empty or invalid: {profile_path})")
+        else:
+            print(f"  profile: skipped (not found: {profile_path})")
+
         # Resume base
         resume_path = data_dir / "resume_base.yml"
         if resume_path.exists():
@@ -126,33 +142,129 @@ def run(user_id: str, data_dir: Path) -> None:
         else:
             print(f"  skills: skipped (not found: {skills_path})")
 
-        # Projects (only *.yml)
+        # Projects (only *.yml) — upsert by name
         projects_dir = data_dir / "projects"
         if projects_dir.is_dir():
-            count = 0
+            created, updated = 0, 0
             for f in sorted(projects_dir.glob("*.yml")):
                 data = _load_yaml(f)
                 if isinstance(data, dict) and data:
                     payload = _project_from_yaml(data)
-                    db.add(Project(user_id=user_id, **payload))
-                    count += 1
-            if count:
+                    existing = (
+                        db.query(Project)
+                        .filter(Project.user_id == user_id, Project.name == payload["name"])
+                        .first()
+                    )
+                    if existing:
+                        for k, v in payload.items():
+                            setattr(existing, k, v)
+                        updated += 1
+                    else:
+                        db.add(Project(user_id=user_id, **payload))
+                        created += 1
+            if created or updated:
                 db.commit()
-                print(f"  projects: ingested {count} from data/projects/*.yml")
+                print(f"  projects: {created} created, {updated} updated from projects/*.yml")
             else:
                 print(f"  projects: no .yml files found in {projects_dir}")
         else:
             print(f"  projects: skipped (no directory: {projects_dir})")
+
+        # Jobs (jobs/jobs.json — array of job objects)
+        jobs_file = data_dir / "jobs" / "jobs.json"
+        if jobs_file.exists():
+            with open(jobs_file, encoding="utf-8") as f:
+                jobs_data = json.load(f)
+            if isinstance(jobs_data, list):
+                count = 0
+                for jd in jobs_data:
+                    if not isinstance(jd, dict):
+                        continue
+                    existing = db.query(Job).filter(Job.slug == jd.get("slug", "")).first()
+                    if existing:
+                        continue
+                    job = Job(
+                        user_id=user_id,
+                        url=jd.get("url") or "",
+                        company=jd.get("company") or "",
+                        role=jd.get("role") or "",
+                        location=jd.get("location") or "",
+                        status=jd.get("status") or "Have Not Applied",
+                        rejection_reason=jd.get("rejection_reason"),
+                        slug=jd.get("slug") or "",
+                        keywords_json=jd.get("keywords"),
+                        source=jd.get("source") or "",
+                        source_platform=jd.get("source_platform"),
+                        work_arrangement=jd.get("work_arrangement"),
+                    )
+                    db.add(job)
+                    count += 1
+                if count:
+                    db.commit()
+                    print(f"  jobs: ingested {count} from {jobs_file.name}")
+                else:
+                    print(f"  jobs: all jobs already exist (skipped)")
+            else:
+                print(f"  jobs: skipped (not a JSON array: {jobs_file})")
+        else:
+            print(f"  jobs: skipped (not found: {jobs_file})")
 
         print("Done.")
     finally:
         db.close()
 
 
+def run_projects_only(user_id: str, project_paths: list[Path]) -> None:
+    """Insert Project rows from standalone YAML files (no profile/resume/skills/jobs)."""
+    settings = get_settings()
+    if not settings.use_postgres():
+        print("Error: Postgres is required. Set DATABASE_URL (or Postgres env).")
+        sys.exit(1)
+
+    engine = get_engine()
+    init_db(engine)
+    session_factory = get_session_factory(engine)
+    db = session_factory()
+
+    try:
+        count = 0
+        for f in project_paths:
+            data = _load_yaml(f)
+            if not isinstance(data, dict) or not data:
+                print(f"  skipped (empty or invalid): {f}")
+                continue
+            payload = _project_from_yaml(data)
+            db.add(Project(user_id=user_id, **payload))
+            count += 1
+        if count:
+            db.commit()
+            print(f"  projects: ingested {count} file(s)")
+        else:
+            print("  projects: nothing ingested")
+        print("Done.")
+    finally:
+        db.close()
+
+
+def _resolve_cli_path(p: Path) -> Path:
+    """Resolve path relative to cwd (not repo root), so ../data/... from backend/ works."""
+    if p.is_absolute():
+        return p.resolve()
+    return (Path.cwd() / p).resolve()
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Ingest data/ YAML files into a user in Postgres.")
     parser.add_argument("user_id", help="User UUID (e.g. 903dc38c-ec0b-4967-bf87-cab3bfc7be74)")
     parser.add_argument("--data-dir", type=Path, default=None, help="Data directory (default: JOBKIT_DATA_DIR)")
+    parser.add_argument(
+        "--project-yml",
+        action="append",
+        dest="project_yml",
+        default=None,
+        metavar="PATH",
+        help="Ingest only this project YAML (repeatable). Paths are relative to cwd. No --data-dir needed.",
+    )
     args = parser.parse_args()
 
     user_id = args.user_id.strip()
@@ -160,11 +272,24 @@ def main() -> None:
         print(f"Error: '{user_id}' doesn't look like a UUID")
         sys.exit(1)
 
+    if args.project_yml:
+        paths = [_resolve_cli_path(Path(p)) for p in args.project_yml]
+        for p in paths:
+            if not p.exists():
+                print(f"Error: project file not found: {p}")
+                sys.exit(1)
+            if not p.is_file():
+                print(f"Error: not a file: {p}")
+                sys.exit(1)
+        print(f"Ingesting {len(paths)} project file(s) into user_id = {user_id}...")
+        run_projects_only(user_id, paths)
+        return
+
     data_dir = args.data_dir or get_settings().jobkit_data_dir
     if not data_dir.is_absolute():
-        # Resolve relative to repo root (parent of backend)
-        backend = Path(__file__).resolve().parent.parent
-        data_dir = (backend.parent / data_dir).resolve()
+        data_dir = _resolve_cli_path(data_dir)
+    else:
+        data_dir = data_dir.resolve()
     if not data_dir.exists():
         print(f"Error: data dir does not exist: {data_dir}")
         sys.exit(1)
