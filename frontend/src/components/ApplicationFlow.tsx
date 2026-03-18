@@ -13,7 +13,7 @@ import {
   Box,
   Divider,
 } from "@mantine/core";
-import { IconFileText, IconUpload, IconCheck, IconExternalLink, IconDownload, IconBrandGoogleDrive } from "@tabler/icons-react";
+import { IconFileText, IconUpload, IconExternalLink, IconDownload, IconBrandGoogleDrive } from "@tabler/icons-react";
 import { api } from "../api/client";
 import { LLM_MODEL_OPTIONS } from "../config/llm-models";
 
@@ -50,7 +50,6 @@ export function ApplicationFlow({ jobId }: { jobId: number }) {
   const [content, setContent] = useState<GeneratedContent>({ resume: null, cover_letter: null, notes: null });
   const [loadingContent, setLoadingContent] = useState(true);
   const [savingDoc, setSavingDoc] = useState<string | null>(null);
-  const [rendering, setRendering] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [artifacts, setArtifacts] = useState<ArtifactItem[]>([]);
   const [error, setError] = useState("");
@@ -93,7 +92,7 @@ export function ApplicationFlow({ jobId }: { jobId: number }) {
     setGenerating(true);
     try {
       await api.post(`/api/jobs/${jobId}/generate`, { tone, focus, length, model: model || undefined });
-      setMessage("Generated. Review and edit below, then approve to create PDFs.");
+      setMessage("Generated. Review and edit below if you like, then use Upload to Drive + Log.");
       fetchGenerated();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Generate failed");
@@ -115,21 +114,6 @@ export function ApplicationFlow({ jobId }: { jobId: number }) {
       setError(err instanceof Error ? err.message : "Save failed");
     } finally {
       setSavingDoc(null);
-    }
-  };
-
-  const handleRender = async () => {
-    setError("");
-    setMessage("");
-    setRendering(true);
-    try {
-      await api.post(`/api/jobs/${jobId}/render`);
-      setMessage("PDFs are being created. Check artifacts below in a few seconds.");
-      setTimeout(fetchArtifacts, 4000);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Render failed");
-    } finally {
-      setRendering(false);
     }
   };
 
@@ -175,7 +159,7 @@ export function ApplicationFlow({ jobId }: { jobId: number }) {
           <Divider />
           <Box>
             <Text size="sm" fw={600} mb="xs" className="font-display">2. Preview & edit</Text>
-            <Text size="xs" c="dimmed" mb="sm">Edit the markdown below, then save. When ready, approve to create PDFs.</Text>
+            <Text size="xs" c="dimmed" mb="sm">Edit the markdown below and save if you make changes. Then use Upload to Drive + Log to create PDFs and update your tracker.</Text>
             {loadingContent ? (
               <Loader size="sm" color="amber" />
             ) : (
@@ -221,19 +205,14 @@ export function ApplicationFlow({ jobId }: { jobId: number }) {
         </>
       )}
 
-      {/* Step 3 & 4: Approve PDF, Upload */}
+      {/* Step 3: Upload (creates PDFs and logs) */}
       {hasGenerated && (
         <>
           <Divider />
           <Box>
-            <Text size="sm" fw={600} mb="xs" className="font-display">3. Approve & create PDF</Text>
-            <Text size="xs" c="dimmed" mb="sm">Create PDFs from the current resume and cover letter (including your edits).</Text>
-            <Button size="sm" leftSection={<IconCheck size={16} />} color="amber" onClick={handleRender} loading={rendering}>Approve & create PDF</Button>
-          </Box>
-          <Box>
-            <Text size="sm" fw={600} mb="xs" className="font-display">4. Upload to Drive + log</Text>
-            <Text size="xs" c="dimmed" mb="sm">Upload PDFs and update your tracker sheet.</Text>
-            <Button size="sm" leftSection={<IconUpload size={16} />} variant="light" color="amber" onClick={handleUpload} loading={uploading}>Upload to Drive + Log to Sheets</Button>
+            <Text size="sm" fw={600} mb="xs" className="font-display">3. Upload to Drive + log</Text>
+            <Text size="xs" c="dimmed" mb="sm">Creates PDFs from your resume and cover letter, uploads them to Drive, and updates your tracker sheet with PDF links.</Text>
+            <Button size="sm" leftSection={<IconUpload size={16} />} color="amber" onClick={handleUpload} loading={uploading}>Upload to Drive + Log to Sheets</Button>
           </Box>
         </>
       )}

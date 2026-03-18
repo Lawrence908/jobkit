@@ -1,8 +1,8 @@
 import { useState, useEffect } from "react";
 import { Outlet } from "react-router-dom";
-import { AppShell, Button, Group, Title, Tooltip } from "@mantine/core";
+import { Alert, AppShell, Button, Group, Title, Tooltip } from "@mantine/core";
 import { Link, useNavigate } from "react-router-dom";
-import { IconLogout, IconRefresh, IconTable, IconUser, IconShield } from "@tabler/icons-react";
+import { IconChartBar, IconEye, IconLogout, IconRefresh, IconTable, IconUser, IconShield } from "@tabler/icons-react";
 import { api } from "../api/client";
 import { useAuth } from "../contexts/AuthContext";
 import { GoogleStatus } from "./GoogleStatus";
@@ -12,7 +12,7 @@ const headerHeight = 56;
 
 export function Layout() {
   const navigate = useNavigate();
-  const { signOut, session } = useAuth();
+  const { signOut, session, isDemo } = useAuth();
   const [reloading, setReloading] = useState(false);
   const [reloadMessage, setReloadMessage] = useState<string | null>(null);
   const [isAdmin, setIsAdmin] = useState<boolean | null>(null);
@@ -114,6 +114,16 @@ export function Layout() {
             </Button>
             <Button
               component={Link}
+              to="/dashboard/stats"
+              variant="subtle"
+              color="dark"
+              leftSection={<IconChartBar size={16} />}
+              size="sm"
+            >
+              Stats
+            </Button>
+            <Button
+              component={Link}
               to="/dashboard/profile"
               variant="subtle"
               color="dark"
@@ -148,6 +158,18 @@ export function Layout() {
         </div>
       </AppShell.Header>
       <AppShell.Main>
+        {isDemo && (
+          <Alert
+            icon={<IconEye size={18} />}
+            color="amber"
+            variant="light"
+            radius={0}
+            mb="md"
+            styles={{ root: { maxWidth: 1100, marginLeft: "auto", marginRight: "auto" } }}
+          >
+            You're viewing the demo as Ada Lovelace. Everything is read-only.
+          </Alert>
+        )}
         <div className="page-container page-container--content" style={{ flex: "1 1 auto", minHeight: 0 }}>
           <Outlet />
         </div>

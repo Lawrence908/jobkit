@@ -28,7 +28,6 @@ export function GeneratePanel({ jobId }: GeneratePanelProps) {
     }).catch(() => {});
   }, []);
   const [generating, setGenerating] = useState(false);
-  const [rendering, setRendering] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
@@ -44,20 +43,6 @@ export function GeneratePanel({ jobId }: GeneratePanelProps) {
       setError(err instanceof Error ? err.message : "Generate failed");
     } finally {
       setGenerating(false);
-    }
-  };
-
-  const handleRender = async () => {
-    setError("");
-    setMessage("");
-    setRendering(true);
-    try {
-      await api.post(`/api/jobs/${jobId}/render`);
-      setMessage("PDF rendering started. Refresh artifacts in a moment.");
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Render failed");
-    } finally {
-      setRendering(false);
     }
   };
 
@@ -108,9 +93,6 @@ export function GeneratePanel({ jobId }: GeneratePanelProps) {
       <Group gap="sm" wrap="wrap">
         <Button size="sm" color="amber" onClick={handleGenerate} loading={generating}>
           Generate
-        </Button>
-        <Button size="sm" variant="light" color="amber" onClick={handleRender} loading={rendering}>
-          Render PDF
         </Button>
         <Button size="sm" variant="light" color="amber" onClick={handleUploadAndLog} loading={uploading}>
           Upload to Drive + Log to Sheets
