@@ -1,6 +1,6 @@
 # JobKit
 
-Self-hosted web app for scraping job descriptions, tailoring resumes with an LLM, rendering PDFs, uploading to Google Drive, and logging to Google Sheets. Private (single-user), runs at `jobs.chrislawrence.ca`.
+Self-hosted, single-user web app for scraping job descriptions, tailoring resumes with an LLM, rendering PDFs, uploading to Google Drive, and logging to Google Sheets.
 
 ## Features
 
@@ -8,13 +8,13 @@ Self-hosted web app for scraping job descriptions, tailoring resumes with an LLM
 - **Truth store**: Master resume, skills, and projects in `data/resume_base.yml`, `data/skills.yml`, and `data/projects/*.yml`.
 - **Tailoring**: Heuristic match + LLM refinement to generate resume, cover letter, and notes (no hallucinated facts).
 - **PDF**: WeasyPrint renders Markdown → PDF with a clean template.
-- **Google**: OAuth for Drive + Sheets; upload artifacts and append/update a tracker row.
+- **Google integration** (optional): OAuth for Drive + Sheets; upload artifacts and append/update a tracker row.
 
 ## Tech stack
 
-- **Backend**: FastAPI, SQLAlchemy (SQLite), Pydantic.
+- **Backend**: FastAPI, SQLAlchemy (SQLite by default), Pydantic.
 - **Frontend**: React, Vite, TypeScript, Mantine.
-- **Deploy**: Docker Compose; Caddy reverse proxy.
+- **Deploy**: Docker Compose; bring your own reverse proxy (Caddy, Nginx, Traefik, etc.).
 
 ## Local development
 
@@ -39,16 +39,15 @@ Self-hosted web app for scraping job descriptions, tailoring resumes with an LLM
 
 1. In the repo root, create `.env` from `.env.example` and set all secrets (including `GOOGLE_*` if using Drive/Sheets).
 2. Ensure `data/`, `jobs/`, and `outputs/` exist (or will be created by compose).
-3. From the homelab infra repo, Caddy is already configured for `jobs.chrislawrence.ca` (see `proxy/Caddyfile`). Ensure the JobKit Caddy block is present.
-4. Run (from `~/apps/jobkit`):
+3. Run:
    ```bash
-   docker compose -f compose.yaml up -d --build
+   docker compose up -d --build
    ```
-5. Add Cloudflare Tunnel route for `jobs.chrislawrence.ca` → `http://caddy:80` and an Access application with your desired policy (e.g. Admin).
+4. Put a reverse proxy in front (Caddy, Nginx, Traefik) to handle TLS and route traffic to the frontend (port 3000) and API (port 8000). See your proxy's docs for configuration.
 
 ## Google OAuth and Drive/Sheets setup
 
-**Quick steps:** Create an OAuth 2.0 Web client in [Google Cloud Console](https://console.cloud.google.com/), set redirect URI to `https://jobs.chrislawrence.ca/api/google/oauth/callback`, put Client ID and Secret in `.env`, generate and set `GOOGLE_TOKEN_ENCRYPTION_KEY`, then in the app click **Connect Google** in the header to authorize.
+**Quick steps:** Create an OAuth 2.0 Web client in [Google Cloud Console](https://console.cloud.google.com/), set the redirect URI to `https://<your-domain>/api/google/oauth/callback`, put Client ID and Secret in `.env`, generate and set `GOOGLE_TOKEN_ENCRYPTION_KEY`, then in the app click **Connect Google** in the header to authorize.
 
 For full instructions (OAuth consent screen, APIs, Drive folder ID, Sheets spreadsheet/tab/column), see **[docs/GOOGLE_SETUP.md](docs/GOOGLE_SETUP.md)**.
 
@@ -56,26 +55,23 @@ For full instructions (OAuth consent screen, APIs, Drive folder ID, Sheets sprea
 
 See `.env.example` for the full list. Required for basic run: `SESSION_SECRET`, `ADMIN_USERNAME`, `ADMIN_PASSWORD`. For generation: `LLM_API_KEY`. For Drive/Sheets: all `GOOGLE_*` variables.
 
-## Supabase / database migrations
+## Database migrations
 
-Use the **backend venv** and **requirements.txt** for Alembic and the data migration script. Do not use system-installed `alembic` or `python3-alembic` (they pull in old SQLAlchemy 1.x and break the app).
+JobKit uses SQLite by default. If you want to use Postgres, set `DATABASE_URL` in `.env` and run Alembic migrations.
 
-From repo root (`.env` can live in repo root or in `backend/`):
+Use the **backend venv** and **requirements.txt** for Alembic. Do not use system-installed `alembic` or `python3-alembic` (they pull in old SQLAlchemy 1.x and break the app).
 
 ```bash
 cd backend
-python3 -m venv .venv   # if you don't have it yet
+python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
+alembic upgrade head
 ```
 
-Then create tables on Supabase and optionally copy data from SQLite:
+If migrating from an existing SQLite database to Postgres:
 
 ```bash
-# 1. Create tables (DATABASE_URL in .env must point at Supabase)
-alembic upgrade head
-
-# 2. One-time: copy existing SQLite data into Supabase (default: data/jobkit.db)
 python scripts/migrate_sqlite_to_postgres.py
 # Or: python scripts/migrate_sqlite_to_postgres.py /path/to/jobkit.db
 ```
