@@ -1,0 +1,16 @@
+# Optional SankeyMATIC paste (42-app marketing example, JobKit statuses).
+# Not shown in the app — copy from here for slides if you want this funnel.
+# https://sankeymatic.com/build/
+
+Have Not Applied [42] Submitted - Pending Response
+Submitted - Pending Response [24] Rejected
+Submitted - Pending Response [10] Interviewing
+Submitted - Pending Response [4] Sent Follow Up Email
+Submitted - Pending Response [2] Re-Applied With Updated Resume
+Submitted - Pending Response [2] N/A
+Interviewing [5] Rejected
+Interviewing [4] Offer Extended - In Progress
+Interviewing [1] Sent Follow Up Email
+Offer Extended - In Progress [2] N/A
+Offer Extended - In Progress [1] Rescinded Application (Self) / Decided not a good fit
+Offer Extended - In Progress [1] Rejected
