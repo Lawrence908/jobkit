@@ -211,6 +211,12 @@ def generate_interview_prep(
         settings = get_settings()
         llm_kwargs["api_key"] = settings.llm_api_key
 
+    effective_key = str(llm_kwargs.get("api_key") or "").strip()
+    if not effective_key:
+        raise ValueError(
+            "Interview prep needs an AI API key. Add one under Profile → LLM, or configure LLM on the server."
+        )
+
     user_prompt = f"""Using ONLY the data below, generate the interview prep JSON object as specified. Job: {job.company} – {job.role}.
 
 {context_str}"""
