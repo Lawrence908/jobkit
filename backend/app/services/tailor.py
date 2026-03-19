@@ -1,6 +1,7 @@
 """Heuristic matching + LLM refinement for resume/cover letter/notes."""
 import json
 import logging
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from app.core.config import get_settings
