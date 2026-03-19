@@ -9,12 +9,13 @@ import {
   Tabs,
   Textarea,
   Loader,
-  Anchor,
   Box,
   Divider,
+  SimpleGrid,
 } from "@mantine/core";
-import { IconFileText, IconUpload, IconExternalLink, IconDownload, IconBrandGoogleDrive } from "@tabler/icons-react";
+import { IconFileText, IconUpload, IconRefresh } from "@tabler/icons-react";
 import { api } from "../api/client";
+import { JobArtifactCard, sortJobArtifacts, type JobArtifactItem } from "./JobArtifactCard";
 import { LLM_MODEL_OPTIONS } from "../config/llm-models";
 
 interface ProfileDefaults {
@@ -28,14 +29,6 @@ interface GeneratedContent {
   resume: string | null;
   cover_letter: string | null;
   notes: string | null;
-}
-
-interface ArtifactItem {
-  id: number;
-  type: string;
-  path: string;
-  drive_link: string | null;
-  download_url: string | null;
 }
 
 const TONE_OPTIONS = ["neutral", "confident", "direct"];
@@ -52,7 +45,8 @@ export function ApplicationFlow({ jobId }: { jobId: number }) {
   const [loadingContent, setLoadingContent] = useState(true);
   const [savingDoc, setSavingDoc] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
-  const [artifacts, setArtifacts] = useState<ArtifactItem[]>([]);
+  const [artifacts, setArtifacts] = useState<JobArtifactItem[]>([]);
+  const [artifactsPreviewKey, setArtifactsPreviewKey] = useState(0);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [hasLlmKey, setHasLlmKey] = useState<boolean | null>(null);
@@ -69,7 +63,13 @@ export function ApplicationFlow({ jobId }: { jobId: number }) {
   }, [jobId]);
 
   const fetchArtifacts = useCallback(() => {
-    api.get<ArtifactItem[]>(`/api/jobs/${jobId}/artifacts`).then(setArtifacts).catch(() => setArtifacts([]));
+    api
+      .get<JobArtifactItem[]>(`/api/jobs/${jobId}/artifacts`)
+      .then((list) => {
+        setArtifacts(list);
+        setArtifactsPreviewKey((k) => k + 1);
+      })
+      .catch(() => setArtifacts([]));
   }, [jobId]);
 
   useEffect(() => {
@@ -228,69 +228,35 @@ export function ApplicationFlow({ jobId }: { jobId: number }) {
         </>
       )}
 
-      {/* Artifacts */}
+      {/* Artifacts — card grid with PDF previews (WeasyPrint) and markdown source previews */}
       {artifacts.length > 0 && (
         <>
           <Divider />
           <Box>
-            <Text size="sm" fw={600} mb="xs" className="font-display">Artifacts</Text>
-            <Text size="xs" c="dimmed" mb="xs">View or download generated documents; open in Drive if uploaded.</Text>
-            <Group gap="xs">
-              <Button size="xs" variant="subtle" onClick={fetchArtifacts}>Refresh</Button>
+            <Group justify="space-between" align="flex-start" wrap="wrap" gap="sm" mb="xs">
+              <Box style={{ minWidth: 0 }}>
+                <Text size="sm" fw={600} className="font-display">
+                  Artifacts
+                </Text>
+                <Text size="xs" c="dimmed" mt={4}>
+                  PDFs render like your Profile resume preview; markdown shows as source. Open in Drive when uploaded.
+                </Text>
+              </Box>
+              <Button
+                size="xs"
+                variant="subtle"
+                color="gray"
+                leftSection={<IconRefresh size={14} />}
+                onClick={fetchArtifacts}
+              >
+                Refresh
+              </Button>
             </Group>
-            <Stack gap="sm" mt="xs">
-              {artifacts.map((a) => {
-                const isPdf = a.type.endsWith("_pdf");
-                const label = a.type.replace(/_/g, " ");
-                const downloadFilename = a.type.replace(/_pdf$/, ".pdf").replace(/_md$/, ".md");
-                return (
-                  <Group key={a.id} gap="md" wrap="wrap" align="center">
-                    <Text size="sm" fw={500} style={{ minWidth: "8rem" }}>
-                      {label}
-                    </Text>
-                    <Group gap="xs">
-                      {a.download_url && (
-                        <>
-                          <Anchor
-                            size="xs"
-                            href={a.download_url}
-                            target="_blank"
-                            rel="noreferrer"
-                            style={{ display: "inline-flex", alignItems: "center", gap: 4 }}
-                          >
-                            <IconExternalLink size={14} />
-                            {isPdf ? "Preview in browser" : "View"}
-                          </Anchor>
-                          <Anchor
-                            size="xs"
-                            href={a.download_url}
-                            download={downloadFilename}
-                            target="_blank"
-                            rel="noreferrer"
-                            style={{ display: "inline-flex", alignItems: "center", gap: 4 }}
-                          >
-                            <IconDownload size={14} />
-                            Download
-                          </Anchor>
-                        </>
-                      )}
-                      {a.drive_link && (
-                        <Anchor
-                          size="xs"
-                          href={a.drive_link}
-                          target="_blank"
-                          rel="noreferrer"
-                          style={{ display: "inline-flex", alignItems: "center", gap: 4 }}
-                        >
-                          <IconBrandGoogleDrive size={14} />
-                          Open in Google Drive
-                        </Anchor>
-                      )}
-                    </Group>
-                  </Group>
-                );
-              })}
-            </Stack>
+            <SimpleGrid cols={{ base: 1, sm: 2, lg: 3 }} spacing="md">
+              {sortJobArtifacts(artifacts).map((a) => (
+                <JobArtifactCard key={a.id} artifact={a} refreshKey={artifactsPreviewKey} />
+              ))}
+            </SimpleGrid>
           </Box>
         </>
       )}
