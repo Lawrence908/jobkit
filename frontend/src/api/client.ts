@@ -13,6 +13,31 @@ async function getAccessToken(): Promise<string | null> {
   return data.session?.access_token ?? null;
 }
 
+/** FastAPI may return detail as string, object, or validation error array — never pass raw objects to Error(). */
+function formatFastApiDetail(detail: unknown): string {
+  if (detail == null || detail === "") return "Request failed";
+  if (typeof detail === "string") return detail;
+  if (Array.isArray(detail)) {
+    const parts = detail.map((item) => {
+      if (item && typeof item === "object" && "msg" in item) {
+        return String((item as { msg: string }).msg);
+      }
+      return typeof item === "string" ? item : JSON.stringify(item);
+    });
+    return parts.filter(Boolean).join(" · ") || "Validation error";
+  }
+  if (typeof detail === "object" && detail !== null) {
+    const m = (detail as { message?: unknown }).message;
+    if (typeof m === "string" && m) return m;
+    try {
+      return JSON.stringify(detail);
+    } catch {
+      return "Request failed";
+    }
+  }
+  return String(detail);
+}
+
 async function request<T>(
   path: string,
   options: RequestInit & { method?: string } = {},
@@ -46,7 +71,7 @@ async function request<T>(
   }
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: res.statusText }));
-    throw new Error(err.detail || String(err));
+    throw new Error(formatFastApiDetail(err.detail ?? err.message ?? res.statusText));
   }
   if (res.status === 204 || res.headers.get("content-length") === "0") {
     return undefined as T;
@@ -70,7 +95,7 @@ async function getBlob(path: string): Promise<Blob> {
   }
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: res.statusText }));
-    throw new Error(typeof err.detail === "string" ? err.detail : "Request failed");
+    throw new Error(formatFastApiDetail(err.detail ?? err.message ?? res.statusText));
   }
   return res.blob();
 }
@@ -99,7 +124,7 @@ async function postForm<T = unknown>(path: string, formData: FormData): Promise<
   }
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: res.statusText }));
-    throw new Error(typeof err.detail === "string" ? err.detail : "Upload failed");
+    throw new Error(formatFastApiDetail(err.detail ?? err.message ?? res.statusText) || "Upload failed");
   }
   return res.json() as Promise<T>;
 }
