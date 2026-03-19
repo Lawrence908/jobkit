@@ -86,7 +86,7 @@ function JobIngestionDiagram() {
   );
 }
 
-/** Career facts + posting + ATS context → LLM → tailored docs (AI tailoring). */
+/** Job + career facts → match & assemble → draft docs (optional AI refine in Profile). */
 function TailoringFlowDiagram() {
   return (
     <svg
@@ -95,7 +95,7 @@ function TailoringFlowDiagram() {
       aria-hidden
     >
       <defs>
-        <linearGradient id="tailor-llm-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+        <linearGradient id="tailor-draft-grad" x1="0%" y1="0%" x2="100%" y2="100%">
           <stop offset="0%" stopColor="var(--accent)" stopOpacity="0.35" />
           <stop offset="100%" stopColor="var(--accent)" stopOpacity="0.12" />
         </linearGradient>
@@ -124,26 +124,26 @@ function TailoringFlowDiagram() {
 
       <rect x="6" y="102" width="76" height="32" rx="6" fill="var(--border-muted)" stroke="var(--border-strong)" strokeWidth="1" />
       <text x="44" y="122" textAnchor="middle" fill="var(--text-secondary)" fontSize="8" fontFamily="var(--font-body), system-ui, sans-serif">
-        ATS / keywords
+        Keywords
       </text>
 
       <path d="M84 29 L120 58" stroke="var(--text-muted)" strokeWidth="1.2" fill="none" markerEnd="url(#tailor-arr)" />
       <path d="M84 75 L120 68" stroke="var(--text-muted)" strokeWidth="1.2" fill="none" />
       <path d="M84 118 L120 78" stroke="var(--text-muted)" strokeWidth="1.2" fill="none" />
 
-      <rect x="120" y="50" width="58" height="46" rx="8" fill="url(#tailor-llm-grad)" stroke="var(--accent)" strokeWidth="1.5" />
-      <text x="149" y="70" textAnchor="middle" fill="var(--text-primary)" fontSize="11" fontWeight="600" fontFamily="var(--font-display), system-ui, sans-serif">
-        LLM
+      <rect x="120" y="50" width="58" height="46" rx="8" fill="url(#tailor-draft-grad)" stroke="var(--accent)" strokeWidth="1.5" />
+      <text x="149" y="68" textAnchor="middle" fill="var(--text-primary)" fontSize="9" fontWeight="600" fontFamily="var(--font-display), system-ui, sans-serif">
+        Match &
       </text>
-      <text x="149" y="84" textAnchor="middle" fill="var(--text-muted)" fontSize="7" fontFamily="var(--font-body), system-ui, sans-serif">
-        context-aware
+      <text x="149" y="82" textAnchor="middle" fill="var(--text-primary)" fontSize="9" fontWeight="600" fontFamily="var(--font-display), system-ui, sans-serif">
+        assemble
       </text>
 
       <path d="M180 73 L194 73" stroke="var(--text-muted)" strokeWidth="1.2" fill="none" markerEnd="url(#tailor-arr2)" />
 
       <rect x="198" y="44" width="92" height="58" rx="8" fill="var(--accent-muted)" stroke="var(--accent)" strokeWidth="1" opacity="0.9" />
       <text x="244" y="66" textAnchor="middle" fill="var(--text-secondary)" fontSize="9" fontFamily="var(--font-body), system-ui, sans-serif">
-        Tailored docs
+        Draft docs
       </text>
       <text x="244" y="82" textAnchor="middle" fill="var(--text-muted)" fontSize="7.5" fontFamily="var(--font-body), system-ui, sans-serif">
         resume · letter · notes
@@ -214,14 +214,14 @@ const features: FeatureItem[] = [
     icon: IconBriefcase,
     title: "Job ingestion",
     description:
-      "Drop in a posting URL or paste the full text—no manual form-filling. JobKit parses role, company, and keywords into a job you can open and tailor anytime.",
+      "Drop in a posting URL or paste the full text—no manual form-filling. JobKit parses role, company, and keywords into a saved job. Next step: a match-and-assemble draft you edit.",
     kind: "ingestion",
   },
   {
     icon: IconWand,
-    title: "AI tailoring",
+    title: "Resume & CV tailoring",
     description:
-      "Adjust model temperature to taste. You review and edit every draft before exporting—most of the work is structuring your profile; the LLM helps configure and phrase from facts you already approved, not inventing history.",
+      "We match job keywords to your projects and skills, then assemble a draft resume and cover letter from your profile. You edit and export. Add an API key in Profile (optional) to refine wording with AI.",
     kind: "tailoring",
   },
   {
@@ -255,7 +255,7 @@ const features: FeatureItem[] = [
 
 const steps = [
   { icon: IconPlus, label: "Add job", text: "Paste a URL or description" },
-  { icon: IconWand, label: "Generate", text: "Tailor resume & cover letter" },
+  { icon: IconWand, label: "Build draft", text: "Match profile to job, then edit resume & letter" },
   { icon: IconUpload, label: "Export", text: "PDF · optional Drive & Sheets" },
   {
     icon: IconTable,
@@ -514,8 +514,8 @@ export function LandingPage() {
             JobKit
           </Title>
           <Text size="xl" c="dimmed" ta="center" maw={560}>
-            Your job-application toolkit: save postings, tailor documents from the profile you maintain, export PDFs, and
-            track applications—with AI you control and optional Google hooks.
+            Your job-application toolkit: save postings, build tailored drafts from your profile, edit and export PDFs, and
+            track applications. Optional: add an API key in Profile for AI-assisted wording; optional Google integration.
           </Text>
           <Group gap="md">
             <Button

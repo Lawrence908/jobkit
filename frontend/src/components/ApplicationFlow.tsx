@@ -21,6 +21,7 @@ interface ProfileDefaults {
   default_tone: string;
   default_focus: string;
   default_length: string;
+  llm_api_key?: string;
 }
 
 interface GeneratedContent {
@@ -54,6 +55,7 @@ export function ApplicationFlow({ jobId }: { jobId: number }) {
   const [artifacts, setArtifacts] = useState<ArtifactItem[]>([]);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
+  const [hasLlmKey, setHasLlmKey] = useState<boolean | null>(null);
 
   const hasGenerated = content.resume != null;
 
@@ -83,7 +85,9 @@ export function ApplicationFlow({ jobId }: { jobId: number }) {
       if (p.default_tone && TONE_OPTIONS.includes(p.default_tone)) setTone(p.default_tone);
       if (p.default_focus && FOCUS_OPTIONS.includes(p.default_focus)) setFocus(p.default_focus);
       if (p.default_length && LENGTH_OPTIONS.includes(p.default_length)) setLength(p.default_length);
-    }).catch(() => {});
+      const key = (p as { llm_api_key?: string }).llm_api_key;
+      setHasLlmKey(Boolean(key && String(key).trim()));
+    }).catch(() => setHasLlmKey(false));
   }, []);
 
   const handleGenerate = async () => {
@@ -92,7 +96,7 @@ export function ApplicationFlow({ jobId }: { jobId: number }) {
     setGenerating(true);
     try {
       await api.post(`/api/jobs/${jobId}/generate`, { tone, focus, length, model: model || undefined });
-      setMessage("Generated. Review and edit below if you like, then use Upload to Drive + Log.");
+      setMessage(hasLlmKey ? "Generated. Review and edit below if you like, then use Upload to Drive + Log." : "Draft built. Review and edit below, then use Upload to Drive + Log.");
       fetchGenerated();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Generate failed");
@@ -141,15 +145,22 @@ export function ApplicationFlow({ jobId }: { jobId: number }) {
       {error && <Alert color="red" variant="light" onClose={() => setError("")} withCloseButton>{error}</Alert>}
       {message && <Alert color="green" variant="light">{message}</Alert>}
 
-      {/* Step 1: Generate */}
+      {/* Step 1: Build draft / Generate */}
       <Box>
-        <Text size="sm" fw={600} mb="xs" className="font-display">1. Generate tailored draft</Text>
+        <Text size="sm" fw={600} mb="xs" className="font-display">1. {hasLlmKey ? "Generate tailored draft" : "Build draft"}</Text>
+        {hasLlmKey === false && (
+          <Alert color="gray" variant="light" mb="sm" title="No API key">
+            Draft is built from your profile and job match (no AI). Add an API key in Profile to optionally refine wording.
+          </Alert>
+        )}
         <Group gap="sm" wrap="wrap" align="flex-end">
           <Select label="Tone" data={TONE_OPTIONS} value={tone} onChange={(v) => setTone(v || "neutral")} size="xs" style={{ minWidth: 110 }} />
           <Select label="Focus" data={FOCUS_OPTIONS} value={focus} onChange={(v) => setFocus(v || "full-stack")} size="xs" style={{ minWidth: 110 }} />
           <Select label="Length" data={LENGTH_OPTIONS} value={length} onChange={(v) => setLength(v || "1 page")} size="xs" style={{ minWidth: 100 }} />
-          <Select label="Model" data={LLM_MODEL_OPTIONS} value={model} onChange={(v) => setModel(v ?? "")} size="xs" style={{ minWidth: 140 }} />
-          <Button size="sm" color="amber" onClick={handleGenerate} loading={generating}>Generate</Button>
+          {hasLlmKey === true && (
+            <Select label="Model" data={LLM_MODEL_OPTIONS} value={model} onChange={(v) => setModel(v ?? "")} size="xs" style={{ minWidth: 140 }} />
+          )}
+          <Button size="sm" color="amber" onClick={handleGenerate} loading={generating}>{hasLlmKey ? "Generate" : "Build draft"}</Button>
         </Group>
       </Box>
 

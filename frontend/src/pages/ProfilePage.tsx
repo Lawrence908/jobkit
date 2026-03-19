@@ -16,6 +16,7 @@ import {
   Slider,
   Avatar,
   Group,
+  Flex,
   Box,
   Badge,
   Divider,
@@ -355,8 +356,20 @@ export function ProfilePage() {
       <Paper className="app-card profile-hero-card" p={0} withBorder radius="lg">
         <Box className="profile-hero-cover" />
         <Box className="profile-hero-body">
-          <Group align="flex-end" justify="space-between" wrap="wrap" gap="md" style={{ minWidth: 0 }}>
-            <Group align="flex-end" gap="lg" wrap="nowrap" style={{ minWidth: 0, flex: 1 }}>
+          <Flex
+            direction={{ base: "column", sm: "row" }}
+            align={{ base: "stretch", sm: "flex-end" }}
+            justify="space-between"
+            gap={{ base: "lg", sm: "md" }}
+            wrap="nowrap"
+            style={{ minWidth: 0 }}
+          >
+            <Flex
+              direction={{ base: "column", sm: "row" }}
+              align={{ base: "center", sm: "flex-end" }}
+              gap={{ base: "md", sm: "lg" }}
+              style={{ minWidth: 0, flex: 1, width: "100%" }}
+            >
               <Stack gap={6} align="center" style={{ flexShrink: 0 }}>
                 <Avatar
                   className="profile-hero-avatar"
@@ -368,10 +381,10 @@ export function ProfilePage() {
                 >
                   {!avatarUrl ? initialsFromName(profile.name) : null}
                 </Avatar>
-                <Text size="xs" c="dimmed" ta="center" maw={100} lh={1.35}>
+                <Text size="xs" c="dimmed" ta="center" maw={280} lh={1.35}>
                   Optional—profile only, not your resume PDF.
                 </Text>
-                <Group gap={4} wrap="nowrap">
+                <Group gap={4} wrap="wrap" justify="center">
                   <FileButton onChange={handleAvatarUpload} accept="image/png,image/jpeg,image/webp,image/gif">
                     {(props) => (
                       <Button
@@ -402,14 +415,27 @@ export function ProfilePage() {
                   )}
                 </Group>
               </Stack>
-              <Box style={{ minWidth: 0, paddingBottom: 4 }}>
-                <Title order={2} className="font-display" style={{ fontWeight: 800, lineHeight: 1.15, wordBreak: "break-word" }}>
+              <Box
+                style={{
+                  minWidth: 0,
+                  paddingBottom: 4,
+                  width: "100%",
+                  maxWidth: "100%",
+                  flex: "1 1 auto",
+                }}
+              >
+                <Title
+                  order={2}
+                  className="font-display"
+                  ta={{ base: "center", sm: "left" }}
+                  style={{ fontWeight: 800, lineHeight: 1.15, wordBreak: "break-word", overflowWrap: "anywhere" }}
+                >
                   {profile.name || "Your name"}
                 </Title>
-                <Text className="profile-hero-headline" mt={6}>
+                <Text className="profile-hero-headline" mt={6} ta={{ base: "center", sm: "left" }} style={{ maxWidth: "none" }}>
                   {headline}
                 </Text>
-                <Group gap="xs" mt="md" wrap="wrap">
+                <Group gap="xs" mt="md" wrap="wrap" className="profile-hero-links">
                   {profile.email && (
                     <Anchor href={`mailto:${profile.email}`} size="sm" c="dimmed" style={{ display: "flex", alignItems: "center", gap: 6 }}>
                       <IconMail size={16} style={{ opacity: 0.8 }} />
@@ -442,11 +468,19 @@ export function ProfilePage() {
                   )}
                 </Group>
               </Box>
-            </Group>
-            <Button onClick={handleSave} loading={saving} color="amber" radius="md" size="sm" style={{ flexShrink: 0 }}>
+            </Flex>
+            <Button
+              className="profile-hero-save"
+              onClick={handleSave}
+              loading={saving}
+              color="amber"
+              radius="md"
+              size="sm"
+              style={{ flexShrink: 0 }}
+            >
               Save profile
             </Button>
-          </Group>
+          </Flex>
         </Box>
       </Paper>
 
@@ -817,9 +851,9 @@ export function ProfilePage() {
       </Paper>
 
       <Paper className="app-card" p="lg" withBorder radius="lg">
-        <Divider label="LLM for generation" labelPosition="left" mb="md" />
+        <Divider label="Optional: AI-assisted wording" labelPosition="left" mb="md" />
         <Text size="xs" c="dimmed" mb="lg">
-          Provider and API key for resume/cover letter generation. Stored in your profile.
+          Add a provider and API key to refine resume and cover letter wording with AI. Without a key, JobKit builds drafts from your profile and job match; you edit and export as usual.
         </Text>
         <Stack gap="md">
           <Select
@@ -850,7 +884,7 @@ export function ProfilePage() {
                   ? "sk-ant-..."
                   : "sk-or-v1-..."
             }
-            description="Your key is stored in your profile and used only for your generations."
+            description="Stored in your profile; used only when you generate (optional)."
             radius="md"
           />
           <Select

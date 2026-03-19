@@ -93,7 +93,7 @@ export function JobCard({ job }: { job: Job }) {
 
         <Group gap="sm" wrap="wrap">
           {hasContent && (
-            <Tooltip label="Tailored content generated (resume, cover, notes)">
+            <Tooltip label="Draft resume & docs ready (resume, cover, notes)">
               <Group gap={4} style={{ color: "var(--mantine-color-teal-6)" }}>
                 <IconFileText size={14} />
                 <Text size="xs" c="dimmed">

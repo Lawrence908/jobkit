@@ -360,6 +360,15 @@ a[href]:not([class*="mantine"]):hover {
   z-index: 1;
 }
 
+@media (max-width: 47.9925em) {
+  .profile-hero-save.mantine-Button-root {
+    width: 100%;
+  }
+  .profile-hero-links {
+    justify-content: center;
+  }
+}
+
 .profile-hero-avatar.mantine-Avatar-root {
   border: 4px solid var(--bg-card);
   box-shadow: var(--shadow-card-hover);

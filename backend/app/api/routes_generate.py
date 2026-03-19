@@ -224,7 +224,7 @@ def generate(
         if e.response.status_code == 401:
             raise HTTPException(
                 status_code=502,
-                detail="LLM API key invalid or missing. Set your API key in Profile → LLM for generation, or LLM_API_KEY in the backend environment.",
+                detail="LLM API key invalid. Check the API key in Profile → LLM (optional) and try again.",
             ) from e
         raise HTTPException(status_code=502, detail=f"Generation failed: {e!s}") from e
     except Exception as e:

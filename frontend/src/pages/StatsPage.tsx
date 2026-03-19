@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Stack,
   Paper,
@@ -17,7 +17,7 @@ import {
   Box,
   ThemeIcon,
 } from "@mantine/core";
-import { useClipboard } from "@mantine/hooks";
+import { useClipboard, useMediaQuery } from "@mantine/hooks";
 import {
   IconExternalLink,
   IconBriefcase,
@@ -89,12 +89,12 @@ function SankeyPreviewVisual() {
         height={220}
         decoding="async"
       />
-      <Text size="xs" c="dimmed" ta="center" maw={300} style={{ position: "relative", zIndex: 1 }} lh={1.5}>
-        Preview — replace{" "}
-        <Text component="span" ff="monospace" size="xs">
-          src/assets/landing/sankey-preview.png
+      <Text size="sm" c="dimmed" ta="center" maw={340} mx="auto" style={{ position: "relative", zIndex: 1 }} lh={1.55}>
+        Copy your pipeline flow data from the text area and paste it into{" "}
+        <Text component="span" fw={600} c="var(--text-secondary)">
+          SankeyMATIC
         </Text>{" "}
-        and rebuild. Copy your flow data below into SankeyMATIC for your own diagram.
+        to build a diagram you can tweak and share.
       </Text>
     </Box>
   );
@@ -110,6 +110,7 @@ export function StatsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const clipboard = useClipboard({ timeout: 2000 });
+  const funnelCompact = useMediaQuery("(max-width: 48em)");
 
   useEffect(() => {
     setLoading(true);
@@ -134,6 +135,15 @@ export function StatsPage() {
       .finally(() => setLoading(false));
   }, []);
 
+  const funnelMaxLabel = funnelCompact ? 26 : 42;
+  const funnelData = useMemo(() => {
+    if (!funnel?.by_status) return null;
+    return Object.entries(funnel.by_status).map(([status, count]) => ({
+      status: status.length > funnelMaxLabel ? status.slice(0, funnelMaxLabel - 1) + "…" : status,
+      count,
+    }));
+  }, [funnel, funnelMaxLabel]);
+
   if (loading) {
     return (
       <Center py="xl">
@@ -149,13 +159,6 @@ export function StatsPage() {
       </div>
     );
   }
-
-  const funnelData =
-    funnel?.by_status &&
-    Object.entries(funnel.by_status).map(([status, count]) => ({
-      status: status.length > 40 ? status.slice(0, 38) + "…" : status,
-      count,
-    }));
 
   const timelineData =
     timeline?.labels?.map((label, i) => ({
@@ -191,30 +194,44 @@ export function StatsPage() {
         </Group>
       </Box>
 
-      <SimpleGrid cols={{ base: 1, xs: 2, sm: 3, md: 5 }} spacing="md">
+      <SimpleGrid cols={{ base: 2, sm: 3, md: 5 }} spacing={{ base: "sm", sm: "md" }}>
         {KPI_CONFIG.map(({ key, label, icon: Icon, accent }) => {
           const v = summary?.[key] ?? 0;
           return (
             <Paper
               key={key}
               className="app-card stats-kpi-card"
-              p="lg"
+              p={{ base: "sm", sm: "lg" }}
               withBorder
               radius="lg"
               style={{
                 borderColor: accent ? "rgba(245, 158, 11, 0.25)" : undefined,
                 background: accent ? "var(--accent-subtle)" : undefined,
+                minWidth: 0,
               }}
             >
-              <Group justify="space-between" align="flex-start" wrap="nowrap" gap="sm">
-                <ThemeIcon variant={accent ? "filled" : "light"} color="amber" size="md" radius="md">
-                  <Icon size={18} />
-                </ThemeIcon>
-              </Group>
-              <Text size="xs" c="dimmed" tt="uppercase" fw={700} style={{ letterSpacing: "0.07em" }} mt="md">
+              <ThemeIcon variant={accent ? "filled" : "light"} color="amber" size="md" radius="md">
+                <Icon size={18} />
+              </ThemeIcon>
+              <Text
+                size="xs"
+                c="dimmed"
+                tt="uppercase"
+                fw={700}
+                style={{ letterSpacing: "0.05em", lineHeight: 1.25 }}
+                mt="sm"
+                lineClamp={2}
+              >
                 {label}
               </Text>
-              <Text size="2rem" fw={800} className="font-display stats-kpi-value" c={accent ? "amber" : undefined} lh={1.1}>
+              <Text
+                size="1.75rem"
+                fw={800}
+                className="font-display stats-kpi-value"
+                c={accent ? "amber" : undefined}
+                lh={1.05}
+                style={{ fontSize: "clamp(1.35rem, 4vw, 2rem)" }}
+              >
                 {v}
               </Text>
             </Paper>
@@ -225,25 +242,37 @@ export function StatsPage() {
       <Grid gutter="md">
         {funnelData && funnelData.length > 0 && (
           <Grid.Col span={{ base: 12, lg: 7 }}>
-            <Paper className="app-card stats-chart-card" p="lg" withBorder radius="lg">
+            <Paper className="app-card stats-chart-card" p={{ base: "md", sm: "lg" }} withBorder radius="lg">
               <Text size="xs" c="dimmed" fw={700} tt="uppercase" style={{ letterSpacing: "0.06em" }} mb="xs">
                 Funnel
               </Text>
-              <Title order={4} className="font-display" mb="lg" fw={700}>
+              <Title order={4} className="font-display" mb={{ base: "md", sm: "lg" }} fw={700} style={{ fontSize: "clamp(1rem, 4vw, 1.25rem)" }}>
                 Applications by status
               </Title>
-              <BarChart
-                data={funnelData}
-                dataKey="status"
-                series={[{ name: "count", color: "amber.6" }]}
-                withBarValueLabel
-                orientation="vertical"
-                h={320}
-                gridAxis="x"
-                tickLine="x"
-                yAxisProps={{ width: 200, tickMargin: 10 }}
-                barChartProps={{ margin: { left: 4, right: 28, top: 4, bottom: 4 } }}
-              />
+              <Box style={{ width: "100%", minWidth: 0, overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
+                <BarChart
+                  data={funnelData}
+                  dataKey="status"
+                  series={[{ name: "count", color: "amber.6" }]}
+                  withBarValueLabel
+                  orientation="vertical"
+                  h={funnelCompact ? Math.min(420, Math.max(240, (funnelData?.length ?? 4) * 44)) : 340}
+                  gridAxis="x"
+                  tickLine="x"
+                  yAxisProps={{
+                    width: funnelCompact ? 118 : 200,
+                    tickMargin: funnelCompact ? 6 : 10,
+                    tick: { fontSize: funnelCompact ? 10 : 12 },
+                    interval: 0,
+                  }}
+                  xAxisProps={{ fontSize: funnelCompact ? 10 : 12 }}
+                  barChartProps={{
+                    margin: funnelCompact
+                      ? { left: 0, right: 20, top: 8, bottom: 8 }
+                      : { left: 4, right: 28, top: 4, bottom: 4 },
+                  }}
+                />
+              </Box>
             </Paper>
           </Grid.Col>
         )}
