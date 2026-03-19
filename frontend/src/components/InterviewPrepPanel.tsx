@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
+import { Link } from "react-router-dom";
 import {
   Stack,
   Text,
@@ -18,6 +19,12 @@ import { IconBulb, IconFileText, IconDownload, IconRefresh } from "@tabler/icons
 import { api } from "../api/client";
 import type { InterviewPrepRecord } from "../api/types";
 
+function catchMessage(err: unknown, fallback: string): string {
+  if (err instanceof Error && err.message) return err.message;
+  if (typeof err === "string") return err;
+  return fallback;
+}
+
 interface InterviewPrepResponse {
   prep: InterviewPrepRecord | null;
 }
@@ -29,6 +36,15 @@ export function InterviewPrepPanel({ jobId }: { jobId: number }) {
   const [renderingPdf, setRenderingPdf] = useState(false);
   const [error, setError] = useState("");
   const [pdfDownloadUrl, setPdfDownloadUrl] = useState<string | null>(null);
+  /** User has saved an LLM key on profile (server-wide key is invisible here). */
+  const [hasPersonalLlmKey, setHasPersonalLlmKey] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    api
+      .get<{ llm_api_key?: string }>("/api/profile")
+      .then((p) => setHasPersonalLlmKey(Boolean(p.llm_api_key && String(p.llm_api_key).trim())))
+      .catch(() => setHasPersonalLlmKey(false));
+  }, []);
 
   const fetchPrep = useCallback(() => {
     setLoading(true);
@@ -61,7 +77,7 @@ export function InterviewPrepPanel({ jobId }: { jobId: number }) {
       await api.post(`/api/jobs/${jobId}/interview-prep/generate`, {});
       fetchPrep();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Generation failed");
+      setError(catchMessage(err, "Generation failed"));
     } finally {
       setGenerating(false);
     }
@@ -78,7 +94,7 @@ export function InterviewPrepPanel({ jobId }: { jobId: number }) {
         setRenderingPdf(false);
       }, 4000);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "PDF render failed");
+      setError(catchMessage(err, "PDF render failed"));
       setRenderingPdf(false);
     }
   };
@@ -131,12 +147,34 @@ export function InterviewPrepPanel({ jobId }: { jobId: number }) {
         </Alert>
       )}
 
+      {hasPersonalLlmKey === false && (
+        <Alert color="gray" variant="light" title="AI API key">
+          <Text size="sm">
+            Interview prep is{" "}
+            <Text span fw={600}>
+              AI-generated
+            </Text>{" "}
+            (unlike resume/cover drafts, which can run without AI). Add an OpenAI-compatible key under{" "}
+            <Anchor component={Link} to="/dashboard/profile" fw={600}>
+              Profile → LLM
+            </Anchor>
+            . If your host already configured a server key, Generate may still work.
+          </Text>
+        </Alert>
+      )}
+
       {!prep && !generating && (
         <Paper p="lg" withBorder>
-          <Text c="dimmed">
-            Generate an interview prep package tailored to this job using your profile, resume, projects, and the job
-            description. You can regenerate to get a new version.
-          </Text>
+          <Stack gap="xs">
+            <Text c="dimmed">
+              Generate an interview prep package tailored to this job: likely questions, STAR prompts, talking points,
+              and match analysis from your profile, resume, matched projects, and the job description. Regenerate anytime
+              for a fresh take.
+            </Text>
+            <Text size="xs" c="dimmed" fs="italic">
+              AI-powered features may become subscription-tier later; for now they use your key or server LLM config.
+            </Text>
+          </Stack>
         </Paper>
       )}
 
