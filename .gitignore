@@ -15,3 +15,7 @@ jobs/
 .vscode/
 
 archive/data/
+
+archive/ideas/
+archive/jobs/
+archive/outputs/
