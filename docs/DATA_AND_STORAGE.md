@@ -27,7 +27,7 @@ Use this doc when prompting for backups, migration, or moving to cloud DB/storag
 
 | Directory / path        | Env / default     | Purpose |
 |-------------------------|-------------------|---------|
-| `data/`                 | `JOBKIT_DATA_DIR` | `jobkit.db`, `profile.yml`, `resume_base.yml`, `skills.yml`, `projects/*.yml`. |
+| `data/`                 | `JOBKIT_DATA_DIR` | `jobkit.db`, `profile.yml`, `resume_base.yml`, `skills.yml`, `projects/*.yml`, **`avatars/<user-id>.jpg`** (optional profile photos for the dashboard only). |
 | `jobs/`                 | `JOBKIT_JOBS_DIR` | Per-job folders `jobs/<slug>/`: `job.json`, `description.md`, `generated/resume.md`, `cover_letter.md`, `notes.md`, and rendered PDFs. |
 | `outputs/`              | `JOBKIT_OUTPUTS_DIR` | Optional alternate root for rendered PDFs (configurable in render path logic). |
 
@@ -40,7 +40,7 @@ Use this doc when prompting for backups, migration, or moving to cloud DB/storag
 ### Google (external)
 
 - **Drive**: Uploaded PDFs (and optionally other files); folder per job; IDs and links stored in `artifacts.drive_file_id` and `artifacts.drive_link`.
-- **Sheets**: Tracker spreadsheet; row keyed by Job URL; no copy of sheet data in JobKit DB.
+- **Sheets**: Tracker spreadsheet; row keyed by Job URL; deletes remove that row from the sheet; no copy of sheet data in JobKit DB.
 
 ---
 
@@ -54,7 +54,7 @@ volumes:
 ```
 
 - Only `jobkit-api` mounts these; frontend is stateless.
-- If you lose `./data`, you lose: DB (jobs, artifacts, Google token), profile, resume_base, skills, projects YAML.
+- If you lose `./data`, you lose: DB (jobs, artifacts, Google token), profile, resume_base, skills, projects YAML, and uploaded profile avatars under `data/avatars/`.
 - If you lose `./jobs`, you lose: job descriptions and all generated markdown/PDFs (metadata remains in DB but paths may point to missing files).
 - `./outputs` is optional and may duplicate or supplement PDFs under `jobs/<slug>/`.
 

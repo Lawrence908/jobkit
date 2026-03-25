@@ -201,6 +201,8 @@ The server `.env` values for `GOOGLE_DRIVE_ROOT_FOLDER_ID`, `GOOGLE_SHEETS_SPREA
   - **Use an existing tracker**: Create a Google Sheet (with your preferred headers and optional dropdowns), get its ID and tab name, and put them in Profile. JobKit will find or append rows by Job URL and update that sheet.
   - **Create a blank tracker**: Create a new Sheet, add a tab (e.g. “Job Applications”), add a header row (e.g. Company Name, Job URL, Application Status, Role, Date Submitted, …). Put the spreadsheet ID and tab name in Profile. JobKit will append new jobs to that sheet.
 
+**Deleting a job** in JobKit removes the matching row from your sheet (same **Job URL** column as sync). The sheet stays aligned with the app. Jobs with no URL are not removed from the sheet (there is no stable key).
+
 So: we **use a tracker you create** (empty or with data); we do not upload a separate “base document” template.
 
 ---

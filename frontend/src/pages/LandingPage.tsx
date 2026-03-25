@@ -214,53 +214,53 @@ const features: FeatureItem[] = [
     icon: IconBriefcase,
     title: "Job ingestion",
     description:
-      "Drop in a posting URL or paste the full text—no manual form-filling. JobKit parses role, company, and keywords into a saved job. Next step: a match-and-assemble draft you edit.",
+      "Paste a posting URL or drop in the full job text—no retyping into forms. JobKit pulls out role, company, and keywords so you can move straight into tailoring.",
     kind: "ingestion",
   },
   {
     icon: IconWand,
-    title: "Resume & CV tailoring",
+    title: "Resume & cover letter drafts",
     description:
-      "We match job keywords to your projects and skills, then assemble a draft resume and cover letter from your profile. You edit and export. Add an API key in Profile (optional) to refine wording with AI.",
+      "JobKit scores your projects and skills against the job, then assembles draft resume and cover letter from the facts in your profile—reorder and rephrase, not invent. Add an API key in Profile if you want an LLM to polish wording; you still review everything before you send.",
     kind: "tailoring",
   },
   {
     icon: IconFileDescription,
-    title: "PDF rendering",
+    title: "PDF export",
     description:
-      "WeasyPrint turns your markdown into clean, professional PDFs ready to submit.",
+      "WeasyPrint turns your markdown into consistent, print-ready PDFs—same template every time, ready to attach or upload.",
     kind: "pdfBg",
   },
   {
     icon: IconCloudUpload,
-    title: "Google integration (optional)",
+    title: "Google Drive & Sheets",
     description:
-      "Optionally upload artifacts to Drive and log applications to a Google Sheet tracker in one click when you use Google.",
+      "Connect Google once. Upload PDFs to Drive and append or update your application tracker in Sheets in a single action—column mapping fits your existing spreadsheet.",
   },
   {
     icon: IconDatabase,
-    title: "Your career facts",
+    title: "Your truth store",
     description:
-      "Skills, work history, education, and projects live in one place. Every tailored resume and letter is built only from what you put there—nothing invented. Prefer a text file? You can edit the same data as YAML.",
+      "Skills, experience, education, and projects live in one structured place. Every draft is assembled from what you saved—JobKit does not fabricate employers, dates, or tech you haven’t listed. Power users can edit the same data as YAML.",
     kind: "yamlBg",
   },
   {
     icon: IconChartSankey,
-    title: "Sankey pipeline view",
+    title: "Pipeline Sankey export",
     description:
-      "Turn your application funnel into flow data for SankeyMATIC—great when you’re juggling many roles. One click copies the flows; paste into SankeyMATIC to share or present how applications move toward interviews and offers.",
+      "Export your funnel as flow data for SankeyMATIC—handy when you’re juggling many roles. Copy the flows in one click, paste into SankeyMATIC, and visualize how applications move toward interviews and offers.",
     kind: "sankeyBg",
   },
 ];
 
 const steps = [
-  { icon: IconPlus, label: "Add job", text: "Paste a URL or description" },
-  { icon: IconWand, label: "Build draft", text: "Match profile to job, then edit resume & letter" },
-  { icon: IconUpload, label: "Export", text: "PDF · optional Drive & Sheets" },
+  { icon: IconPlus, label: "Add job", text: "URL or pasted description" },
+  { icon: IconWand, label: "Tailor", text: "Match profile to role; edit drafts" },
+  { icon: IconUpload, label: "Export", text: "PDFs · optional Drive upload" },
   {
     icon: IconTable,
-    label: "Spreadsheet tracking",
-    text: "Pipeline, dates, and notes in one place—optionally synced to Google Sheets",
+    label: "Track",
+    text: "Pipeline in-app; optional Google Sheets sync",
   },
 ];
 
@@ -513,9 +513,13 @@ export function LandingPage() {
           >
             JobKit
           </Title>
-          <Text size="xl" c="dimmed" ta="center" maw={560}>
-            Your job-application toolkit: save postings, build tailored drafts from your profile, edit and export PDFs, and
-            track applications. Optional: add an API key in Profile for AI-assisted wording; optional Google integration.
+          <Text size="xl" c="dimmed" ta="center" maw={580}>
+            From saved posting to tailored resume and cover letter—built from{" "}
+            <Text component="span" fw={600} c="var(--mantine-color-text)">
+              your
+            </Text>{" "}
+            career facts, then exported as PDFs and tracked in one place. Optional LLM in Profile polishes wording; optional
+            Google sync handles Drive and Sheets. You stay in control of what ships.
           </Text>
           <Group gap="md">
             <Button
@@ -550,7 +554,7 @@ export function LandingPage() {
         {/* Features */}
         <Box py={48}>
           <Title order={2} ta="center" mb="xl" className="font-display">
-            What you get
+            What JobKit does
           </Title>
           <SimpleGrid cols={{ base: 1, sm: 2, lg: 3 }} spacing="lg">
             {features.map((item) => (
@@ -584,10 +588,10 @@ export function LandingPage() {
         {/* Footer CTA */}
         <Stack align="center" gap="md" py={48}>
           <Title order={3} ta="center" className="font-display">
-            Ready to get started?
+            Ready to try it?
           </Title>
-          <Text size="sm" c="dimmed" ta="center">
-            Create an account with an invite code to start tailoring your applications.
+          <Text size="sm" c="dimmed" ta="center" maw={480}>
+            Sign up with an invite code, or use the demo above to explore the profile and workflow.
           </Text>
           <Button component={Link} to="/register" color="amber" size="md">
             Register

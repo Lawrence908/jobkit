@@ -36,6 +36,7 @@ export function InterviewPrepPanel({ jobId }: { jobId: number }) {
   const [renderingPdf, setRenderingPdf] = useState(false);
   const [error, setError] = useState("");
   const [pdfDownloadUrl, setPdfDownloadUrl] = useState<string | null>(null);
+  const [pdfDownloadBusy, setPdfDownloadBusy] = useState(false);
   /** User has saved an LLM key on profile (server-wide key is invisible here). */
   const [hasPersonalLlmKey, setHasPersonalLlmKey] = useState<boolean | null>(null);
 
@@ -99,6 +100,27 @@ export function InterviewPrepPanel({ jobId }: { jobId: number }) {
     }
   };
 
+  const handleDownloadInterviewPrepPdf = async () => {
+    if (!pdfDownloadUrl) return;
+    setPdfDownloadBusy(true);
+    try {
+      const blob = await api.getBlob(pdfDownloadUrl);
+      const u = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = u;
+      a.download = "interview_prep.pdf";
+      a.rel = "noopener";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.setTimeout(() => URL.revokeObjectURL(u), 120_000);
+    } catch (err) {
+      setError(catchMessage(err, "Download failed"));
+    } finally {
+      setPdfDownloadBusy(false);
+    }
+  };
+
   if (loading) {
     return (
       <Box py="xl">
@@ -133,11 +155,16 @@ export function InterviewPrepPanel({ jobId }: { jobId: number }) {
           )}
         </Group>
         {pdfDownloadUrl && (
-          <Anchor href={pdfDownloadUrl} target="_blank" rel="noopener noreferrer" size="sm">
-            <Group gap={4}>
-              <IconDownload size={14} /> Download interview prep PDF
-            </Group>
-          </Anchor>
+          <Button
+            variant="subtle"
+            color="amber"
+            size="compact-sm"
+            leftSection={<IconDownload size={14} />}
+            loading={pdfDownloadBusy}
+            onClick={handleDownloadInterviewPrepPdf}
+          >
+            Download interview prep PDF
+          </Button>
         )}
       </Group>
 

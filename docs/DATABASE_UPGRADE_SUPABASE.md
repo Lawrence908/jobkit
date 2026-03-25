@@ -38,7 +38,7 @@ Use this doc when planning a move from SQLite to a cloud database (e.g. Supabase
 1. **Database (Postgres)**  
    - Hosted Postgres; connection via connection string (direct or pooler).  
    - Use for: `jobs`, `artifacts`, `google_tokens`.  
-   - RLS (row-level security): optional; JobKit is single-user so one role may be enough.
+   - **RLS**: Enabled on all public tables (migration `012_rls`). See [Row Level Security (RLS)](#row-level-security-rls) below.
 
 2. **Auth (optional)**  
    - Supabase Auth can replace or sit alongside current session (username/password from env).  
@@ -80,6 +80,34 @@ Use this doc when planning a move from SQLite to a cloud database (e.g. Supabase
 - **Truth store and profile**: If they stay on disk, ensure `data/` is backed up or replicated; if moved to DB or Storage, add a reload/refresh path so the app sees updates.
 - **Cost and limits**: Supabase free tier has DB size and Storage limits; check current and projected usage.
 - **Local dev**: Use a second Supabase project or local Postgres so dev doesn’t touch production data.
+
+---
+
+## Row Level Security (RLS)
+
+**Roles (what Supabase means):**
+
+| Role / connection | What it is |
+|-------------------|------------|
+| **`postgres`** (direct DB URL) | Superuser connection used by FastAPI + Alembic. **Bypasses RLS** — your app keeps working as before. |
+| **`anon`** | PostgREST / Data API with the **anon** API key (no JWT). |
+| **`authenticated`** | PostgREST with a logged-in user’s **JWT** (Supabase Auth). Your frontend only uses this for **Auth**, not for querying tables. |
+| **Service role key** | Bypasses RLS for Supabase client APIs (Storage, etc.). Never expose in the browser. |
+
+There is **no separate “admin” Postgres role** in JobKit. `ADMIN_USERNAME` / `ADMIN_PASSWORD` / `ADMIN_USER_ID` in `.env` are **application** admin (cookie + optional JWT check on the API), not a database role.
+
+**What we did:** Migration `012_enable_row_level_security.py` turns on RLS for every JobKit table in `public`. We **do not** add policies for `anon` / `authenticated`, so the Supabase **Data API** cannot read or write those rows with the anon key or user JWTs. That clears Advisor “RLS disabled” warnings and matches the architecture (all data goes through FastAPI).
+
+**If you later query tables from the client** (e.g. realtime or direct Supabase JS), add policies such as `user_id = auth.uid()::text` per table.
+
+**Apply the migration** (against Supabase):
+
+```bash
+cd backend && alembic upgrade head
+```
+
+If Advisor still lists a table JobKit doesn’t own, enable RLS manually in the SQL Editor:  
+`ALTER TABLE public.<table_name> ENABLE ROW LEVEL SECURITY;`
 
 ---
 

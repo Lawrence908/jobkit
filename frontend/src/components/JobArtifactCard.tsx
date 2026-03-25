@@ -44,7 +44,35 @@ export function JobArtifactCard({ artifact, refreshKey }: { artifact: JobArtifac
   const [mdText, setMdText] = useState<string | null>(null);
   const [loading, setLoading] = useState(Boolean(download_url && kind !== "other"));
   const [loadError, setLoadError] = useState(false);
+  const [linkBusy, setLinkBusy] = useState<null | "open" | "download">(null);
   const objectUrlRef = useRef<string | null>(null);
+
+  const openOrDownloadViaAuth = async (mode: "open" | "download") => {
+    if (!download_url) return;
+    setLinkBusy(mode);
+    try {
+      const blob = await api.getBlob(download_url);
+      const u = URL.createObjectURL(blob);
+      if (mode === "open") {
+        window.open(u, "_blank", "noopener,noreferrer");
+        // Keep URL alive for the new tab; revoke later (revoking too soon blanks the tab).
+        window.setTimeout(() => URL.revokeObjectURL(u), 3_600_000);
+      } else {
+        const a = document.createElement("a");
+        a.href = u;
+        a.download = downloadFilename;
+        a.rel = "noopener";
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        window.setTimeout(() => URL.revokeObjectURL(u), 120_000);
+      }
+    } catch {
+      /* user can retry */
+    } finally {
+      setLinkBusy(null);
+    }
+  };
 
   useEffect(() => {
     if (!download_url || kind === "other") {
@@ -176,7 +204,7 @@ export function JobArtifactCard({ artifact, refreshKey }: { artifact: JobArtifac
           {!loading && loadError && (
             <Center h="100%" p="sm">
               <Text size="xs" c="dimmed" ta="center">
-                Couldn&apos;t load preview. Use Download or open in a new tab.
+                Couldn&apos;t load preview. Try Refresh, or use Open / Download below (uses your session).
               </Text>
             </Center>
           )}
@@ -234,27 +262,46 @@ export function JobArtifactCard({ artifact, refreshKey }: { artifact: JobArtifac
         {download_url && (
           <>
             <Anchor
+              component="button"
+              type="button"
               size="xs"
-              href={download_url}
-              target="_blank"
-              rel="noreferrer"
               c="amber"
-              style={{ display: "inline-flex", alignItems: "center", gap: 4 }}
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 4,
+                background: "none",
+                border: "none",
+                padding: 0,
+                cursor: linkBusy ? "wait" : "pointer",
+                font: "inherit",
+              }}
+              onClick={() => openOrDownloadViaAuth("open")}
+              disabled={!!linkBusy}
             >
               <IconExternalLink size={14} />
-              {kind === "pdf" ? "Open in tab" : "View raw"}
+              {linkBusy === "open" ? "Opening…" : kind === "pdf" ? "Open in tab" : "View raw"}
             </Anchor>
             <Anchor
+              component="button"
+              type="button"
               size="xs"
-              href={download_url}
-              download={downloadFilename}
-              target="_blank"
-              rel="noreferrer"
               c="amber"
-              style={{ display: "inline-flex", alignItems: "center", gap: 4 }}
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 4,
+                background: "none",
+                border: "none",
+                padding: 0,
+                cursor: linkBusy ? "wait" : "pointer",
+                font: "inherit",
+              }}
+              onClick={() => openOrDownloadViaAuth("download")}
+              disabled={!!linkBusy}
             >
               <IconDownload size={14} />
-              Download
+              {linkBusy === "download" ? "Saving…" : "Download"}
             </Anchor>
           </>
         )}

@@ -86,8 +86,14 @@ async function getBlob(path: string): Promise<Blob> {
   const token = await getAccessToken();
   if (token) {
     headers.Authorization = `Bearer ${token}`;
+  } else {
+    const csrf = getCsrfToken();
+    if (csrf) headers["X-CSRF-Token"] = csrf;
   }
-  const res = await fetch(url, { credentials: "include", headers });
+  // Use same-origin credentials only. Artifact downloads 302 to Supabase signed URLs; with
+  // credentials: "include" the browser sends credentialed cross-origin requests, and Supabase
+  // responds with Access-Control-Allow-Origin: * — which is invalid for credentialed fetches.
+  const res = await fetch(url, { credentials: "same-origin", headers });
   if (res.status === 401) {
     await supabase.auth.signOut();
     window.location.href = "/login";
