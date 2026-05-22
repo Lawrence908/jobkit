@@ -16,6 +16,10 @@ services:
       - "8122:8000"
     env_file:
       - .env
+    volumes:
+      - ./archive/jobs:/app/jobs
+      - ./archive/outputs:/app/outputs
+      - ./archive/data:/app/data
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
       interval: 30s

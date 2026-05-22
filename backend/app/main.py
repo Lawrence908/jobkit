@@ -25,7 +25,9 @@ from app.api.routes_profile import router as profile_router
 from app.api.routes_resume import router as resume_router
 from app.api.routes_skills import router as skills_router
 from app.api.routes_projects import router as projects_router
+from app.api.routes_exemplars import router as exemplars_router
 from app.services.truth_store import load_truth_store
+from app.services.exemplar_store import load_exemplars
 
 setup_logging("INFO")
 logger = logging.getLogger(__name__)
@@ -39,6 +41,7 @@ async def lifespan(app: FastAPI):
     init_db(engine)
     get_session_factory(engine)
     load_truth_store()
+    load_exemplars()
     logger.info("JobKit backend started")
     yield
     engine.dispose()
@@ -104,3 +107,4 @@ app.include_router(profile_router)
 app.include_router(resume_router)
 app.include_router(skills_router)
 app.include_router(projects_router)
+app.include_router(exemplars_router)

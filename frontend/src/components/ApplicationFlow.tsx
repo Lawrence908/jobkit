@@ -12,11 +12,22 @@ import {
   Box,
   Divider,
   SimpleGrid,
+  Modal,
+  TextInput,
 } from "@mantine/core";
-import { IconFileText, IconUpload, IconRefresh } from "@tabler/icons-react";
+import { IconFileText, IconUpload, IconRefresh, IconStar } from "@tabler/icons-react";
 import { api } from "../api/client";
 import { JobArtifactCard, sortJobArtifacts, type JobArtifactItem } from "./JobArtifactCard";
 import { LLM_MODEL_OPTIONS } from "../config/llm-models";
+import {
+  EXEMPLAR_ROLE_FAMILIES,
+  EXEMPLAR_SENIORITIES,
+  type ExemplarRoleFamily,
+  type ExemplarSeniority,
+  type PromoteExemplarResponse,
+} from "../api/types";
+
+type PromoteDocType = "resume" | "cover_letter";
 
 interface ProfileDefaults {
   default_tone: string;
@@ -50,6 +61,18 @@ export function ApplicationFlow({ jobId }: { jobId: number }) {
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [hasLlmKey, setHasLlmKey] = useState<boolean | null>(null);
+
+  // Promote-to-exemplar (admin only)
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [promoteOpen, setPromoteOpen] = useState(false);
+  const [promoteDocType, setPromoteDocType] = useState<PromoteDocType>("resume");
+  const [promoting, setPromoting] = useState(false);
+  const [pfRoleFamily, setPfRoleFamily] = useState<ExemplarRoleFamily>("data_ml");
+  const [pfSeniority, setPfSeniority] = useState<ExemplarSeniority>("senior");
+  const [pfTargetRole, setPfTargetRole] = useState("");
+  const [pfTags, setPfTags] = useState("");
+  const [pfJdSummary, setPfJdSummary] = useState("");
+  const [pfQualityNotes, setPfQualityNotes] = useState("");
 
   const hasGenerated = content.resume != null;
 
@@ -88,6 +111,13 @@ export function ApplicationFlow({ jobId }: { jobId: number }) {
       const key = (p as { llm_api_key?: string }).llm_api_key;
       setHasLlmKey(Boolean(key && String(key).trim()));
     }).catch(() => setHasLlmKey(false));
+  }, []);
+
+  useEffect(() => {
+    api
+      .get<{ admin: boolean }>("/api/admin/check")
+      .then((res) => setIsAdmin(res?.admin ?? false))
+      .catch(() => setIsAdmin(false));
   }, []);
 
   const handleGenerate = async () => {
@@ -140,6 +170,37 @@ export function ApplicationFlow({ jobId }: { jobId: number }) {
     setContent((prev) => ({ ...prev, [docKey]: value }));
   };
 
+  const openPromote = (docType: PromoteDocType) => {
+    setPromoteDocType(docType);
+    setError("");
+    setPromoteOpen(true);
+  };
+
+  const handlePromote = async () => {
+    setError("");
+    setPromoting(true);
+    try {
+      const res = await api.post<PromoteExemplarResponse>(`/api/jobs/${jobId}/promote-exemplar`, {
+        doc_type: promoteDocType,
+        role_family: pfRoleFamily,
+        seniority: pfSeniority,
+        target_role: pfTargetRole.trim() || undefined,
+        tags: pfTags
+          .split(",")
+          .map((t) => t.trim().toLowerCase())
+          .filter(Boolean),
+        quality_notes: pfQualityNotes.trim() || undefined,
+        jd_summary: pfJdSummary.trim() || undefined,
+      });
+      setMessage(`Promoted to exemplar library (${res.id}).`);
+      setPromoteOpen(false);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Promote failed");
+    } finally {
+      setPromoting(false);
+    }
+  };
+
   return (
     <Stack gap="lg">
       {error && <Alert color="red" variant="light" onClose={() => setError("")} withCloseButton>{error}</Alert>}
@@ -188,7 +249,12 @@ export function ApplicationFlow({ jobId }: { jobId: number }) {
                     onChange={(e) => updateContent("resume", e.target.value)}
                     styles={{ input: { fontSize: 13, fontFamily: "monospace", minHeight: 360 } }}
                   />
-                  <Button size="xs" variant="light" color="amber" mt="xs" loading={savingDoc === "resume"} onClick={() => handleSaveDoc("resume")}>Save resume</Button>
+                  <Group gap="xs" mt="xs">
+                    <Button size="xs" variant="light" color="amber" loading={savingDoc === "resume"} onClick={() => handleSaveDoc("resume")}>Save resume</Button>
+                    {isAdmin && (
+                      <Button size="xs" variant="subtle" color="grape" leftSection={<IconStar size={14} />} onClick={() => openPromote("resume")}>Promote to exemplar</Button>
+                    )}
+                  </Group>
                 </Tabs.Panel>
                 <Tabs.Panel value="cover_letter" pt="sm">
                   <Textarea
@@ -198,7 +264,12 @@ export function ApplicationFlow({ jobId }: { jobId: number }) {
                     onChange={(e) => updateContent("cover_letter", e.target.value)}
                     styles={{ input: { fontSize: 13, fontFamily: "monospace", minHeight: 320 } }}
                   />
-                  <Button size="xs" variant="light" color="amber" mt="xs" loading={savingDoc === "cover_letter"} onClick={() => handleSaveDoc("cover_letter")}>Save cover letter</Button>
+                  <Group gap="xs" mt="xs">
+                    <Button size="xs" variant="light" color="amber" loading={savingDoc === "cover_letter"} onClick={() => handleSaveDoc("cover_letter")}>Save cover letter</Button>
+                    {isAdmin && (
+                      <Button size="xs" variant="subtle" color="grape" leftSection={<IconStar size={14} />} onClick={() => openPromote("cover_letter")}>Promote to exemplar</Button>
+                    )}
+                  </Group>
                 </Tabs.Panel>
                 <Tabs.Panel value="notes" pt="sm">
                   <Textarea
@@ -260,6 +331,71 @@ export function ApplicationFlow({ jobId }: { jobId: number }) {
           </Box>
         </>
       )}
+
+      <Modal
+        opened={promoteOpen}
+        onClose={() => setPromoteOpen(false)}
+        title={`Promote ${promoteDocType === "cover_letter" ? "cover letter" : "resume"} to exemplar`}
+        size="lg"
+      >
+        <Stack gap="sm">
+          <Text size="xs" c="dimmed">
+            Adds this approved document to the shared exemplar library as a form-only example. Its
+            content is never copied into future generations; only its structure, tone, and length
+            guide the model. Fill in metadata so it is selected for similar roles.
+          </Text>
+          <Group grow>
+            <Select
+              label="Role family"
+              data={[...EXEMPLAR_ROLE_FAMILIES]}
+              value={pfRoleFamily}
+              onChange={(v) => setPfRoleFamily((v as ExemplarRoleFamily) || "other")}
+            />
+            <Select
+              label="Seniority"
+              data={[...EXEMPLAR_SENIORITIES]}
+              value={pfSeniority}
+              onChange={(v) => setPfSeniority((v as ExemplarSeniority) || "mid")}
+            />
+          </Group>
+          <TextInput
+            label="Target role"
+            placeholder="Defaults to this job's role"
+            value={pfTargetRole}
+            onChange={(e) => setPfTargetRole(e.currentTarget.value)}
+          />
+          <TextInput
+            label="Tags (comma-separated)"
+            placeholder="Defaults to job keywords"
+            value={pfTags}
+            onChange={(e) => setPfTags(e.currentTarget.value)}
+          />
+          <Textarea
+            label="JD summary"
+            placeholder="Defaults to job role + description snippet"
+            autosize
+            minRows={3}
+            value={pfJdSummary}
+            onChange={(e) => setPfJdSummary(e.currentTarget.value)}
+          />
+          <Textarea
+            label="Quality notes (what form to imitate)"
+            placeholder="e.g. section order, two bullets per role, honest gap handling"
+            autosize
+            minRows={3}
+            value={pfQualityNotes}
+            onChange={(e) => setPfQualityNotes(e.currentTarget.value)}
+          />
+          <Group justify="flex-end">
+            <Button variant="default" size="sm" onClick={() => setPromoteOpen(false)}>
+              Cancel
+            </Button>
+            <Button color="grape" size="sm" loading={promoting} onClick={handlePromote}>
+              Promote
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
     </Stack>
   );
 }

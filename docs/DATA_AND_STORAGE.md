@@ -27,11 +27,12 @@ Use this doc when prompting for backups, migration, or moving to cloud DB/storag
 
 | Directory / path        | Env / default     | Purpose |
 |-------------------------|-------------------|---------|
-| `data/`                 | `JOBKIT_DATA_DIR` | `jobkit.db`, `profile.yml`, `resume_base.yml`, `skills.yml`, `projects/*.yml`, **`avatars/<user-id>.jpg`** (optional profile photos for the dashboard only). |
+| `data/`                 | `JOBKIT_DATA_DIR` | `jobkit.db`, `profile.yml`, `resume_base.yml`, `skills.yml`, `projects/*.yml`, **`exemplars/*.yml`** (curated few-shot tailoring examples), **`avatars/<user-id>.jpg`** (optional profile photos for the dashboard only). |
 | `jobs/`                 | `JOBKIT_JOBS_DIR` | Per-job folders `jobs/<slug>/`: `job.json`, `description.md`, `generated/resume.md`, `cover_letter.md`, `notes.md`, and rendered PDFs. |
 | `outputs/`              | `JOBKIT_OUTPUTS_DIR` | Optional alternate root for rendered PDFs (configurable in render path logic). |
 
 - **Truth store**: All under `data/` — YAML only; loaded at startup and on explicit reload; not in SQLite.
+- **Exemplar library** (`data/exemplars/*.yml`): A global, shared, curated set of human-approved tailored documents (frontmatter + final body) used as few-shot examples of FORM during LLM generation. Like the truth store it is **disk-only in both local and Supabase modes** (it is config, never per-user content), loaded at startup and refreshed on promote or via `POST /api/exemplars/reload`. See FEATURES.md → "Exemplar library".
 - **Job content**: Metadata in DB; body and generated content on disk under `jobs/<slug>/`.
 - **Artifacts**: DB row points to file via `path`; file lives under `jobs/<slug>/generated/` or `outputs/`.
 

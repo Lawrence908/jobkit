@@ -29,6 +29,13 @@ Use this doc when prompting for feature work, UX changes, or scope decisions.
 - **Output**: Markdown files in `jobs/<slug>/generated/` (resume.md, cover_letter.md, notes.md); optionally ATS-oriented phrasing if job has extracted ATS signals.
 - **Config**: Tone, focus, length overridable per job in UI; `LLM_*` env for model/temperature.
 
+### Exemplar library (few-shot tailoring examples)
+- **Purpose**: Curated, human-approved tailored documents act as few-shot examples that teach the LLM the target *form* (section order, bullet density, voice/tone, length, formatting conventions, honest gap acknowledgement) **without ever copying their content**. No-fabrication rule still holds; exemplars are never a fabrication path.
+- **Storage**: `data/exemplars/*.yml`, one file per approved doc (frontmatter + final `body`). Fields: `id, doc_type (resume|cover_letter), role_family, seniority, target_role, jd_summary, tags, quality_notes, body`. Global and shared across users (form only); **disk-only in both local and Supabase modes**, like the truth store.
+- **Selection**: On each generation (LLM path only), the JD is classified into `{role_family, seniority, tags}` (LLM when an API key is set, heuristic fallback otherwise). Exemplars are scored by tag overlap (x2), role_family match (+3 exact, +1 same family group), and seniority (+1); top-K per doc_type with a **hard cap of 2**, falling back to nearest role_family. Empty/no-match degrades to exactly the prior behaviour.
+- **Injection**: Selected exemplars are appended **after** the truth-store JSON in the resume and cover-letter prompts, inside a clearly delimited `REFERENCE EXEMPLARS` block wrapping each doc in `<exemplar ...>` tags, so the model never confuses example form with the candidate's real facts. The notes document gets no exemplars.
+- **Promote path** (**admin only**): "Promote to exemplar" buttons on the Resume and Cover-letter tabs (Job detail) open a modal to confirm/edit metadata, then `POST /api/jobs/{id}/promote-exemplar` writes a new YAML file and reloads the library. Manual disk edits can be picked up via `POST /api/exemplars/reload`; `GET /api/exemplars/status` reports the count.
+
 ### PDF rendering
 - **Engine**: WeasyPrint (Markdown → HTML → PDF).
 - **Input**: Generated markdown (resume, cover letter) from `jobs/<slug>/generated/`.

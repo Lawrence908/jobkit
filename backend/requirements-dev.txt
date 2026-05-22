@@ -1,0 +1,6 @@
+# Dev/test-only dependencies (not installed in the Docker image).
+# Install into the same venv used for the app:
+#   .venv/bin/pip install -r requirements-dev.txt
+# Then run the suite:
+#   .venv/bin/python -m pytest tests/ -q
+pytest>=8.0.0

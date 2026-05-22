@@ -12,8 +12,11 @@ from app.core.auth import get_current_user, verify_csrf
 from app.core.config import get_settings
 from app.db.session import get_db
 from app.db.models import Artifact, Job
+from app.api.routes_admin import require_admin
 from app.services.ingest import ingest_job, job_json_to_markdown, save_job_to_disk, url_to_job_json, paste_only_to_job_json
 from app.services import storage as storage_svc
+from app.services import exemplar_store
+from app.services.tailor import classify_job_for_exemplars
 from app.services.extract import extract_keywords, extract_ats_signals
 from app.utils.files import job_slug, ensure_safe_relative_path
 from app.services.job_status_service import log_status_change, update_timestamp_fields
@@ -93,6 +96,16 @@ class UpdateJobRequest(BaseModel):
 
 class UpdateDescriptionRequest(BaseModel):
     raw_body: str
+
+
+class PromoteExemplarRequest(BaseModel):
+    doc_type: str  # resume | cover_letter
+    role_family: str
+    seniority: str
+    target_role: str | None = None
+    tags: list[str] = []
+    quality_notes: str = ""
+    jd_summary: str | None = None
 
 
 def _user_jobs(db: Session, user_id: str):
@@ -390,10 +403,16 @@ def update_job_description(
     return out
 
 
-def _sync_job_to_sheet_if_configured(job: Job, db: Session) -> None:
-    """Sync job to Google Sheet only when the job owner has Google connected and has set a sheet in their profile."""
+def _sync_job_to_sheet_if_configured(job: Job, db: Session) -> dict:
+    """Sync job to Google Sheet when the job owner has Google connected and a sheet configured.
+
+    Returns a dict shaped {"status": ..., "reason": ...} where status is one of:
+    - "synced": row was written/updated successfully
+    - "not_configured": job has no user, no sheet set in profile, or no Google credentials
+    - "failed": the sync raised; reason holds a short, user-safe message
+    """
     if not job.user_id:
-        return
+        return {"status": "not_configured", "reason": "job has no owner"}
     from app.db.models import Artifact
     from app.services.google_auth import get_credentials
     from app.services.google_sheets import sync_job_to_sheet
@@ -404,12 +423,12 @@ def _sync_job_to_sheet_if_configured(job: Job, db: Session) -> None:
     spreadsheet_id = (profile.get("google_sheets_spreadsheet_id") or "").strip()
     sheet_name = (profile.get("google_sheets_tab_name") or "").strip()
     if not spreadsheet_id or not sheet_name:
-        return
+        return {"status": "not_configured", "reason": "no sheet configured in profile"}
     url_column = (profile.get("google_sheets_url_column") or "").strip() or "Job URL"
 
     creds = get_credentials(db, user_id=job.user_id)
     if not creds:
-        return
+        return {"status": "not_configured", "reason": "Google account not connected"}
     resume_link = cover_link = notes_link = ""
     for art in db.query(Artifact).filter(Artifact.job_id == job.id):
         if art.drive_link:
@@ -439,8 +458,20 @@ def _sync_job_to_sheet_if_configured(job: Job, db: Session) -> None:
             notes_link,
             column_map,
         )
-    except Exception:
-        pass
+        return {"status": "synced", "reason": None}
+    except Exception as e:
+        reason = str(e) or e.__class__.__name__
+        if "invalid_grant" in reason.lower():
+            # Refresh token was revoked or expired. Clear the stale row so
+            # /api/google/status reports disconnected and the UI surfaces a
+            # Connect/Reconnect button again (otherwise the user is stuck:
+            # status keeps reporting "connected" against a dead token).
+            from app.services.google_auth import clear_token
+            clear_token(db, job.user_id)
+        logger.warning(
+            "Sheet sync failed (user_id=%s job_id=%s): %s", job.user_id, job.id, e
+        )
+        return {"status": "failed", "reason": reason}
 
 
 def _remove_job_from_sheet_if_configured(job: Job, db: Session) -> None:
@@ -510,11 +541,29 @@ def update_job(
         saved_desc = None
     db.commit()
     db.refresh(job)
-    _sync_job_to_sheet_if_configured(job, db)
+    sheet_sync = _sync_job_to_sheet_if_configured(job, db)
     out = _job_to_response(job)
+    out["sheet_sync"] = sheet_sync
     if saved_desc is not None:
         out.update(_description_stats_from_raw_body(saved_desc))
     return out
+
+
+@router.post("/{job_id}/sync-sheet")
+def sync_job_to_sheet_endpoint(
+    job_id: int,
+    request: Request,
+    db: Annotated[Session, Depends(get_db)],
+    user_id: Annotated[str, Depends(get_current_user)],
+):
+    """Manually re-push this job to the user's Google Sheet tracker.
+
+    Used as a recovery path when an automatic sync (during PATCH) failed — e.g. expired Google
+    auth, network blip, or row was manually deleted from the sheet.
+    """
+    verify_csrf(request)
+    job = _get_user_job(db, user_id, job_id)
+    return {"sheet_sync": _sync_job_to_sheet_if_configured(job, db)}
 
 
 @router.post("/{job_id}/extract")
@@ -561,6 +610,88 @@ def re_extract_job(
     db.commit()
     db.refresh(job)
     return _job_to_response(job)
+
+
+def _read_generated_md(job: Job, doc_type: str) -> str | None:
+    """Read the approved resume.md or cover_letter.md via storage-or-disk. doc_type: resume|cover_letter."""
+    filename = "cover_letter.md" if doc_type == "cover_letter" else "resume.md"
+    if storage_svc.use_storage() and job.user_id:
+        try:
+            return storage_svc.download_generated_md(job.user_id, job.slug, filename)
+        except Exception:
+            pass
+    gen_dir = ensure_safe_relative_path(get_settings().jobkit_jobs_dir, job.slug, "generated")
+    path = gen_dir / filename
+    if path.exists():
+        return path.read_text(encoding="utf-8")
+    return None
+
+
+@router.post("/{job_id}/promote-exemplar")
+def promote_exemplar(
+    job_id: int,
+    request: Request,
+    data: PromoteExemplarRequest,
+    db: Annotated[Session, Depends(get_db)],
+    admin_id: Annotated[str, Depends(require_admin)],
+):
+    """Promote an approved resume/cover_letter into the shared exemplar library (admin only).
+
+    Stores the FINAL approved document text as a few-shot example of FORM. Defaults jd_summary,
+    tags, and target_role from the job (and a heuristic classification) when omitted.
+    """
+    verify_csrf(request)
+    doc_type = (data.doc_type or "").strip().lower()
+    if doc_type not in ("resume", "cover_letter"):
+        raise HTTPException(status_code=400, detail="doc_type must be resume or cover_letter")
+    role_family = (data.role_family or "").strip().lower()
+    if role_family not in exemplar_store.ROLE_FAMILIES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"role_family must be one of {list(exemplar_store.ROLE_FAMILIES)}",
+        )
+    seniority = (data.seniority or "").strip().lower()
+    if seniority not in ("mid", "senior"):
+        raise HTTPException(status_code=400, detail="seniority must be mid or senior")
+
+    job = _get_user_job(db, admin_id, job_id)
+    body = _read_generated_md(job, doc_type)
+    if not body or not body.strip():
+        raise HTTPException(
+            status_code=400,
+            detail=f"No approved {doc_type} found to promote. Generate and save it first.",
+        )
+
+    job_json = _load_job_json(job) or {}
+    target_role = (data.target_role or "").strip() or (job.role or "").strip() or "Role"
+    tags = [str(t).strip().lower() for t in (data.tags or []) if str(t).strip()]
+    jd_summary = (data.jd_summary or "").strip()
+    if not tags or not jd_summary:
+        meta = classify_job_for_exemplars(job_json)  # heuristic only; no LLM call on the promote path
+        if not tags:
+            tags = meta.get("tags") or []
+        if not jd_summary:
+            company = (job.company or "").strip()
+            raw = (job_json.get("raw_body") or "").strip()
+            head = target_role + (f" at {company}" if company else "") + "."
+            jd_summary = (head + " " + raw[:400]).strip() if raw else head
+
+    record = {
+        "doc_type": doc_type,
+        "role_family": role_family,
+        "seniority": seniority,
+        "target_role": target_role,
+        "jd_summary": jd_summary,
+        "tags": tags,
+        "quality_notes": (data.quality_notes or "").strip(),
+        "body": body.strip(),
+    }
+    path = exemplar_store.write_exemplar(record)
+    saved = next(
+        (e for e in exemplar_store.get_exemplars() if e.get("id") == path.stem),
+        {**record, "id": path.stem},
+    )
+    return {"ok": True, "id": path.stem, "file": path.name, "exemplar": saved}
 
 
 @router.delete("/{job_id}", status_code=status.HTTP_204_NO_CONTENT)
