@@ -101,7 +101,7 @@ def chat_completion(
     use_temp = float(use_temp)
 
     if use_anthropic:
-        # Anthropic model IDs (e.g. claude-sonnet-4-20250514); profile may store "anthropic/claude-sonnet-4.6" from OpenRouter
+        # Anthropic model IDs (e.g. claude-sonnet-4-20250514); profile may store "anthropic/claude-sonnet-4.7" from OpenRouter
         anthropic_model = use_model.replace("anthropic/", "") if use_model.startswith("anthropic/") else use_model
         return _anthropic_messages(use_base, use_key, anthropic_model, messages, use_temp)
 

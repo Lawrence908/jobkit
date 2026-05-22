@@ -20,7 +20,7 @@ depends_on: Union[str, Sequence[str], None] = None
 def upgrade() -> None:
     op.add_column("profiles", sa.Column("llm_provider", sa.String(length=64), server_default="openrouter", nullable=True))
     op.add_column("profiles", sa.Column("llm_api_key", sa.Text(), server_default="", nullable=True))
-    op.add_column("profiles", sa.Column("llm_model", sa.String(length=256), server_default="anthropic/claude-sonnet-4.6", nullable=True))
+    op.add_column("profiles", sa.Column("llm_model", sa.String(length=256), server_default="anthropic/claude-sonnet-4.7", nullable=True))
     op.add_column("profiles", sa.Column("llm_temperature", sa.Float(), server_default="0.2", nullable=True))
 
 

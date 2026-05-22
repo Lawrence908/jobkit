@@ -13,7 +13,7 @@ export type LLMProvider = (typeof LLM_PROVIDER_OPTIONS)[number]["value"];
 /** Model options per provider. Value is sent to API as-is (OpenRouter uses e.g. anthropic/claude-*). */
 export const LLM_MODEL_OPTIONS_BY_PROVIDER: Record<LLMProvider, { value: string; label: string }[]> = {
   openrouter: [
-    { value: "anthropic/claude-sonnet-4.6", label: "Claude 4.6 Sonnet" },
+    { value: "anthropic/claude-sonnet-4.7", label: "Claude 4.7 Sonnet" },
     { value: "anthropic/claude-haiku-4.5", label: "Claude 4.5 Haiku" },
     { value: "openai/gpt-4.1-mini", label: "GPT-4.1 mini" },
     { value: "openai/gpt-5.4", label: "GPT-5.4" },
@@ -33,7 +33,7 @@ export const LLM_MODEL_OPTIONS_BY_PROVIDER: Record<LLMProvider, { value: string;
 };
 
 export const DEFAULT_MODEL_BY_PROVIDER: Record<LLMProvider, string> = {
-  openrouter: "anthropic/claude-sonnet-4.6",
+  openrouter: "anthropic/claude-sonnet-4.7",
   openai: "gpt-4.1-mini",
   anthropic: "claude-sonnet-4-20250514",
 };

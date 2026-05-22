@@ -96,7 +96,7 @@ class Profile(Base):
     default_length: Mapped[str] = mapped_column(String(64), default="1 page")
     llm_provider: Mapped[str] = mapped_column(String(64), default="openrouter")
     llm_api_key: Mapped[str] = mapped_column(Text, default="")
-    llm_model: Mapped[str] = mapped_column(String(256), default="anthropic/claude-sonnet-4.6")
+    llm_model: Mapped[str] = mapped_column(String(256), default="anthropic/claude-sonnet-4.7")
     llm_temperature: Mapped[float] = mapped_column(Float, default=0.2)
     # Per-user Google integration (optional). When set, Drive/Sheets use these instead of server .env.
     google_drive_root_folder_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
