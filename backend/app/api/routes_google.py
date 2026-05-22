@@ -11,7 +11,7 @@ from app.core.auth import get_current_user
 from app.core.config import get_settings
 from app.db.session import get_db
 from app.db.models import GoogleToken
-from app.services.google_auth import auth_url_with_state, exchange_code, get_credentials, save_refresh_token
+from app.services.google_auth import auth_url_with_state, exchange_code, get_credentials, save_refresh_token, verify_credentials
 from app.services.google_sheets import get_all_sheet_data
 
 router = APIRouter(prefix="/api/google", tags=["google"])
@@ -25,12 +25,18 @@ def google_status(
     db: Annotated[Session, Depends(get_db)],
     user_id: Annotated[str, Depends(get_current_user)],
 ):
-    """Only connected when this user has their own Google token (no shared/global token)."""
+    """Connected only when this user has their own Google token that still refreshes.
+
+    Verifies the refresh token with Google so an expired or revoked token reports
+    disconnected (and is cleared) instead of a false "connected".
+    """
     row = db.query(GoogleToken).filter(
         GoogleToken.provider == "google",
         GoogleToken.user_id == user_id,
     ).first()
     if not row:
+        return {"connected": False, "scopes": []}
+    if verify_credentials(db, user_id) is None:
         return {"connected": False, "scopes": []}
     return {"connected": True, "scopes": (row.scopes or "").split(",")}
 

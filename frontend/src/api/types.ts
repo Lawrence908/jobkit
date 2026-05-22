@@ -26,6 +26,11 @@ export interface Job {
   has_generated_content?: boolean;
   /** From list: number of saved artifacts (PDFs, Drive links). */
   artifact_count?: number;
+  /** Result of pushing this update to the user's Google Sheet tracker. Present on PATCH responses only. */
+  sheet_sync?: {
+    status: "synced" | "not_configured" | "failed";
+    reason: string | null;
+  };
 }
 
 /** Interview prep summary_json structure from API */
@@ -75,6 +80,53 @@ export interface InterviewPrepVersionSummary {
 export interface JobOptions {
   application_status: string[];
   rejection_reasons: string[];
+}
+
+/** Allowed exemplar role families (mirror backend exemplar_store.ROLE_FAMILIES). */
+export const EXEMPLAR_ROLE_FAMILIES = [
+  "devops_sre",
+  "platform",
+  "data_ml",
+  "ai_llm",
+  "backend",
+  "infra",
+  "other",
+] as const;
+export type ExemplarRoleFamily = (typeof EXEMPLAR_ROLE_FAMILIES)[number];
+
+export const EXEMPLAR_SENIORITIES = ["mid", "senior"] as const;
+export type ExemplarSeniority = (typeof EXEMPLAR_SENIORITIES)[number];
+
+/** Request body for POST /api/jobs/{id}/promote-exemplar (admin only). */
+export interface PromoteExemplarRequest {
+  doc_type: "resume" | "cover_letter";
+  role_family: ExemplarRoleFamily;
+  seniority: ExemplarSeniority;
+  target_role?: string;
+  tags?: string[];
+  quality_notes?: string;
+  jd_summary?: string;
+}
+
+/** A stored exemplar record (frontmatter + body) returned by the promote endpoint. */
+export interface ExemplarRecord {
+  id: string;
+  doc_type: string;
+  role_family: string;
+  seniority: string;
+  target_role: string;
+  jd_summary: string;
+  tags: string[];
+  quality_notes: string;
+  body: string;
+}
+
+/** Response from POST /api/jobs/{id}/promote-exemplar. */
+export interface PromoteExemplarResponse {
+  ok: boolean;
+  id: string;
+  file: string;
+  exemplar: ExemplarRecord;
 }
 
 export interface MeResponse {

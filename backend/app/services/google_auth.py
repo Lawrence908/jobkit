@@ -106,3 +106,40 @@ def get_credentials(db, user_id: str | None = None):
         client_secret=settings.google_oauth_client_secret,
         scopes=SCOPES,
     )
+
+
+def clear_token(db, user_id: str) -> None:
+    """Remove a user's stored Google token (e.g. after it is revoked/expired)."""
+    db.query(GoogleToken).filter(
+        GoogleToken.provider == "google",
+        GoogleToken.user_id == user_id,
+    ).delete()
+    db.commit()
+
+
+def verify_credentials(db, user_id: str):
+    """Return live credentials if the user's refresh token still works, else None.
+
+    Performs a lightweight token refresh against Google. If the refresh token has
+    been revoked or expired (invalid_grant), the stale row is deleted so the app
+    stops reporting a false "connected" state. Transient/transport errors are
+    treated as still-connected so a network blip does not drop a valid connection.
+    """
+    from google.auth.exceptions import RefreshError
+    from google.auth.transport.requests import Request
+
+    creds = get_credentials(db, user_id=user_id)
+    if creds is None:
+        return None
+    try:
+        creds.refresh(Request())
+        return creds
+    except RefreshError as e:
+        if "invalid_grant" in str(e).lower():
+            clear_token(db, user_id)
+            return None
+        logger.warning("Google token refresh error for user %s: %s", user_id, e)
+        return creds
+    except Exception as e:
+        logger.warning("Google token verification failed for user %s: %s", user_id, e)
+        return creds

@@ -41,6 +41,7 @@ import {
 } from "@tabler/icons-react";
 import { useMediaQuery } from "@mantine/hooks";
 import { api } from "../api/client";
+import { GoogleStatus } from "../components/GoogleStatus";
 import { flattenSkillPool } from "../utils/skills";
 import {
   LLM_PROVIDER_OPTIONS,
@@ -220,7 +221,7 @@ export function ProfilePage() {
           ...p,
           llm_provider: p.llm_provider ?? "openrouter",
           llm_api_key: p.llm_api_key ?? "",
-          llm_model: p.llm_model ?? "anthropic/claude-sonnet-4.6",
+          llm_model: p.llm_model ?? "anthropic/claude-sonnet-4.7",
           llm_temperature: typeof p.llm_temperature === "number" ? p.llm_temperature : 0.2,
         })
       )
@@ -918,9 +919,12 @@ export function ProfilePage() {
 
       <Paper className="app-card" p="lg" withBorder radius="lg">
         <Divider label="Google Drive & Sheets" labelPosition="left" mb="md" />
-        <Text size="xs" c="dimmed" mb="lg">
-          Connect Google in the header, then set these to sync jobs to your folder and tracker sheet.
+        <Text size="xs" c="dimmed" mb="md">
+          Connect (or reconnect) Google here, then set these to sync jobs to your folder and tracker sheet. If a sync ever reports your connection expired, use Reconnect below.
         </Text>
+        <Box mb="lg">
+          <GoogleStatus allowReconnect />
+        </Box>
         <Stack gap="md">
           <TextInput
             label="Drive root folder ID"

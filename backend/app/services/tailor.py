@@ -1,11 +1,14 @@
 """Heuristic matching + LLM refinement for resume/cover letter/notes."""
 import json
 import logging
+import re
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from app.core.config import get_settings
 from app.services.llm_provider import chat_completion
+from app.services import exemplar_store
+from app.services.exemplar_store import ROLE_FAMILIES
 from app.services.truth_store import get_projects, get_skills
 from app.services.profile_store import get_profile
 from app.services.resume_base_store import get_resume_base as get_resume_base_db
@@ -242,6 +245,167 @@ def generate_artifacts_heuristic(
     return resume_md, cover_md, notes_md
 
 
+# ---------------------------------------------------------------------------
+# Exemplar selection: classify the JD, then inject reference exemplars (form only)
+# ---------------------------------------------------------------------------
+
+# Lowercase substrings mapped to a role_family; counted across role + keywords + description.
+_FAMILY_KEYWORDS: list[tuple[str, tuple[str, ...]]] = [
+    ("ai_llm", ("llm", "genai", "generative ai", "prompt engineer", "rag", "openai",
+                "anthropic", "chatbot", "gpt", "agentic", "ai governance")),
+    ("data_ml", ("machine learning", " ml ", "data scien", "tensorflow", "pytorch",
+                 "analytics", "data strateg", "etl", "dashboard", "data engineer",
+                 "data governance", "data pipeline")),
+    ("devops_sre", ("devops", "sre", "site reliability", "ci/cd", "kubernetes",
+                    "terraform", "ansible", "observability", "incident")),
+    ("platform", ("platform engineer", "internal tooling", "developer experience",
+                  "developer platform", "platform team")),
+    ("infra", ("infrastructure", "cloud engineer", "system administ", "networking",
+               "data center", "virtualization")),
+    ("backend", ("backend", "back-end", "back end", "api develop", "microservice",
+                 "fastapi", "django", "node.js", "server-side")),
+]
+
+_SENIOR_RE = re.compile(r"\b(senior|sr\.?|lead|principal|staff|head of|director)\b", re.I)
+_JUNIOR_RE = re.compile(r"\b(junior|jr\.?|entry[- ]level|intern|associate|graduate)\b", re.I)
+
+
+def _heuristic_family(role: str, keywords: list[str], desc: str) -> str:
+    hay = " ".join([role or "", " ".join(str(k) for k in (keywords or [])), desc or ""]).lower()
+    best_family = "other"
+    best_hits = 0
+    for family, terms in _FAMILY_KEYWORDS:
+        hits = sum(1 for t in terms if t in hay)
+        if hits > best_hits:
+            best_hits = hits
+            best_family = family
+    return best_family
+
+
+def _heuristic_seniority(role: str, desc: str) -> str:
+    if _JUNIOR_RE.search(role or ""):
+        return "mid"
+    if _SENIOR_RE.search(f"{role or ''}\n{desc or ''}"):
+        return "senior"
+    return "mid"
+
+
+def _heuristic_tags(keywords: list[str], limit: int = 10) -> list[str]:
+    out: list[str] = []
+    seen: set[str] = set()
+    for k in keywords or []:
+        s = str(k).strip().lower()
+        if s and s not in seen:
+            seen.add(s)
+            out.append(s)
+        if len(out) >= limit:
+            break
+    return out
+
+
+def _parse_json_obj(raw: str) -> dict:
+    """Parse a JSON object from an LLM response, tolerating code fences and surrounding prose."""
+    s = (raw or "").strip()
+    if s.startswith("```"):
+        s = re.sub(r"^```[a-zA-Z]*\n?", "", s)
+        s = re.sub(r"\n?```$", "", s).strip()
+    start = s.find("{")
+    end = s.rfind("}")
+    if start != -1 and end != -1 and end > start:
+        s = s[start : end + 1]
+    data = json.loads(s)
+    return data if isinstance(data, dict) else {}
+
+
+def classify_job_for_exemplars(job_json: dict, _chat=None) -> dict:
+    """Return {role_family, seniority, tags} for a JD. Uses the LLM when _chat is given, else heuristics.
+
+    The heuristic path always runs as the fallback for any field the LLM omits or returns invalid,
+    so selection works (and degrades gracefully) with or without an API key.
+    """
+    role = (job_json.get("role") or "").strip()
+    desc = (job_json.get("raw_body") or "")[:4000]
+    keywords = job_json.get("keywords") or []
+
+    fallback = {
+        "role_family": _heuristic_family(role, keywords, desc),
+        "seniority": _heuristic_seniority(role, desc),
+        "tags": _heuristic_tags(keywords),
+    }
+    if _chat is None:
+        return fallback
+
+    system = "You classify a job description to select writing examples. Respond with ONLY a JSON object, no prose."
+    user = (
+        "Classify this job. Return a JSON object with exactly these keys:\n"
+        f'  "role_family": one of {list(ROLE_FAMILIES)}\n'
+        '  "seniority": one of ["mid", "senior"]\n'
+        '  "tags": array of 3-8 short lowercase kebab-case topic tags (skills/themes)\n\n'
+        f"Role: {role}\n\nDescription:\n{desc}"
+    )
+    try:
+        raw = _chat(
+            [{"role": "system", "content": system}, {"role": "user", "content": user}],
+            temperature=0,
+        )
+        data = _parse_json_obj(raw)
+    except Exception:
+        return fallback
+
+    rf = str(data.get("role_family") or "").strip().lower()
+    if rf not in ROLE_FAMILIES:
+        rf = fallback["role_family"]
+    sen = str(data.get("seniority") or "").strip().lower()
+    if sen not in ("mid", "senior"):
+        sen = fallback["seniority"]
+    tags = [str(t).strip().lower() for t in (data.get("tags") or []) if str(t).strip()][:8]
+    if not tags:
+        tags = fallback["tags"]
+    return {"role_family": rf, "seniority": sen, "tags": tags}
+
+
+# Verbatim instruction block. Keep exactly as specified: it teaches form, forbids copying content.
+_EXEMPLAR_BLOCK_HEADER = """REFERENCE EXEMPLARS
+The documents below are human-approved, high-quality tailored applications for
+OTHER roles. Use them ONLY as demonstrations of form: section order and
+headings, bullet structure and density, sentence voice and tone, length,
+formatting conventions (no em dashes; plain hyphens for ranges), and how to
+acknowledge skill gaps honestly and confidently.
+
+Do NOT copy any content from the exemplars: no employers, project names,
+metrics, phrasing, or skill claims. Every fact in the output must come solely
+from the candidate's truth stores and the target job description. If an
+exemplar references a tool or experience the truth stores do not contain, do
+not carry it over.
+
+Match the exemplars' voice and structure; source all substance from the
+truth stores."""
+
+
+def _build_exemplar_block(exemplars: list[dict]) -> str:
+    """Render the verbatim REFERENCE EXEMPLARS block plus each wrapped exemplar.
+
+    Returns "" when the list is empty so callers can append unconditionally and degrade to
+    current behaviour when no exemplar matches.
+    """
+    if not exemplars:
+        return ""
+    parts = [_EXEMPLAR_BLOCK_HEADER]
+    for ex in exemplars:
+        doc_type = (ex.get("doc_type") or "").strip()
+        target_role = (ex.get("target_role") or "").strip()
+        jd_summary = (ex.get("jd_summary") or "").strip()
+        body = (ex.get("body") or "").strip()
+        parts.append(
+            f'<exemplar doc_type="{doc_type}" target_role="{target_role}">\n'
+            f"JD it was tailored to: {jd_summary}\n"
+            "---\n"
+            f"{body}\n"
+            "</exemplar>"
+        )
+    return "\n\n".join(parts)
+
+
 def generate_artifacts(
     job_slug: str,
     job_json: dict,
@@ -307,6 +471,23 @@ When an "ats" object is provided, use it to improve ATS (applicant tracking syst
     def _chat(msgs: list, **kwargs: object) -> str:
         return chat_completion(msgs, **{**llm_kwargs, **kwargs})
 
+    # Reference exemplars (form only): classify this JD, then select matching human-approved docs.
+    # Gated on a non-empty library so empty/no-match degrades to current behaviour with no extra calls.
+    resume_exemplar_block = ""
+    cover_exemplar_block = ""
+    if exemplar_store.get_exemplars():
+        meta = classify_job_for_exemplars(job_json, _chat=_chat)
+        resume_exemplar_block = _build_exemplar_block(
+            exemplar_store.select_exemplars(
+                meta["role_family"], meta["seniority"], meta["tags"], "resume", k=1, max_k=2
+            )
+        )
+        cover_exemplar_block = _build_exemplar_block(
+            exemplar_store.select_exemplars(
+                meta["role_family"], meta["seniority"], meta["tags"], "cover_letter", k=1, max_k=2
+            )
+        )
+
     resume_format = """
 Resume formatting rules (follow exactly):
 - Contact header: Put name and title at top. Then list email and phone as plain text on one line. For LinkedIn, website, and GitHub use markdown links only: write [LinkedIn](url), [Website](url), [GitHub](url) so the PDF shows the label as a clickable hyperlink, not the raw URL. Do not paste full URLs as visible text; use hyperlinked labels only.
@@ -323,12 +504,18 @@ Resume formatting rules (follow exactly):
 {resume_format}
 
 {context_str}"""
+    # Exemplars go AFTER the truth JSON, clearly delimited, so the model never confuses example
+    # form with the candidate's real facts.
+    if resume_exemplar_block:
+        resume_prompt = f"{resume_prompt}\n\n{resume_exemplar_block}"
     resume_md = _chat(
         [{"role": "system", "content": system}, {"role": "user", "content": resume_prompt}],
     )
 
     # Cover letter
     cover_prompt = f"""Using ONLY the data below, write a short cover letter in markdown for this role at this company. Tone: {tone}. No invented facts. Where relevant, use the "ats" action_verbs and key_phrases to echo the job language.\n\n{context_str}"""
+    if cover_exemplar_block:
+        cover_prompt = f"{cover_prompt}\n\n{cover_exemplar_block}"
     cover_md = _chat(
         [{"role": "system", "content": system}, {"role": "user", "content": cover_prompt}],
     )

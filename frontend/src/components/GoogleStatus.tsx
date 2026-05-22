@@ -1,9 +1,17 @@
 import { useEffect, useState } from "react";
-import { Badge, Button } from "@mantine/core";
+import { Badge, Button, Group } from "@mantine/core";
 import { IconBrandGoogle } from "@tabler/icons-react";
 import { api } from "../api/client";
 
-export function GoogleStatus() {
+/**
+ * Google connection control.
+ *
+ * Default (header) shows a green "Connected" badge or a "Connect Google" button.
+ * With `allowReconnect`, the connected state also offers a "Reconnect" button so a
+ * user whose token expired can re-authorize in place (e.g. on the Profile page,
+ * where the expired-sync warning sends them).
+ */
+export function GoogleStatus({ allowReconnect = false }: { allowReconnect?: boolean }) {
   const [connected, setConnected] = useState<boolean | null>(null);
   const [connecting, setConnecting] = useState(false);
 
@@ -25,8 +33,9 @@ export function GoogleStatus() {
   };
 
   if (connected === null) return null;
+
   if (connected) {
-    return (
+    const badge = (
       <Badge
         variant="outline"
         color="green"
@@ -36,7 +45,24 @@ export function GoogleStatus() {
         Google: Connected
       </Badge>
     );
+    if (!allowReconnect) return badge;
+    return (
+      <Group gap="sm" wrap="wrap">
+        {badge}
+        <Button
+          variant="subtle"
+          color="gray"
+          size="compact-sm"
+          leftSection={<IconBrandGoogle size={14} />}
+          loading={connecting}
+          onClick={handleConnect}
+        >
+          Reconnect
+        </Button>
+      </Group>
+    );
   }
+
   return (
     <Button
       variant="light"

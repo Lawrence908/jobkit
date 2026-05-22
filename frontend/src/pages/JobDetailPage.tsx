@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { Link, useParams, useNavigate } from "react-router-dom";
 import {
   Stack,
   Group,
@@ -50,6 +50,8 @@ export function JobDetailPage() {
   const [location, setLocation] = useState("");
   const [saving, setSaving] = useState(false);
   const [saveMessage, setSaveMessage] = useState("");
+  const [sheetWarning, setSheetWarning] = useState("");
+  const [resyncing, setResyncing] = useState(false);
   const [tailorPreview, setTailorPreview] = useState<TailorPreview | null>(null);
   const [rawBody, setRawBody] = useState("");
   const [descriptionMessage, setDescriptionMessage] = useState("");
@@ -108,6 +110,7 @@ export function JobDetailPage() {
     if (!jobId) return;
     setSaving(true);
     setSaveMessage("");
+    setSheetWarning("");
     setDescriptionMessage("");
     const descriptionOnly =
       overrides &&
@@ -148,12 +151,19 @@ export function JobDetailPage() {
       if (savedDescription) {
         api.get<TailorPreview>(`/api/jobs/${jobId}/tailor-preview`).then(setTailorPreview).catch(() => setTailorPreview(null));
       }
+      const sync = updated.sheet_sync;
       if (descriptionOnly) {
         setDescriptionMessage("Description and keywords saved.");
         setTimeout(() => setDescriptionMessage(""), 4000);
       } else {
-        setSaveMessage("Saved. Tracker updated.");
+        const msg = sync?.status === "synced" ? "Saved. Tracker updated." : "Saved.";
+        setSaveMessage(msg);
         setTimeout(() => setSaveMessage(""), 4000);
+      }
+      if (sync?.status === "failed") {
+        setSheetWarning(
+          `Saved locally, but the Google Sheet tracker did not update${sync.reason ? `: ${sync.reason}` : ""}.`,
+        );
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Save failed";
@@ -166,6 +176,36 @@ export function JobDetailPage() {
       }
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleResync = async () => {
+    if (!jobId) return;
+    setResyncing(true);
+    setSheetWarning("");
+    setSaveMessage("");
+    try {
+      const res = await api.post<{ sheet_sync: NonNullable<Job["sheet_sync"]> }>(
+        `/api/jobs/${jobId}/sync-sheet`,
+        {},
+      );
+      const sync = res.sheet_sync;
+      if (sync.status === "synced") {
+        setSaveMessage("Tracker updated.");
+        setTimeout(() => setSaveMessage(""), 4000);
+      } else if (sync.status === "not_configured") {
+        setSheetWarning(
+          `Google Sheet tracker not configured${sync.reason ? `: ${sync.reason}` : ""}.`,
+        );
+      } else {
+        setSheetWarning(
+          `Google Sheet tracker did not update${sync.reason ? `: ${sync.reason}` : ""}.`,
+        );
+      }
+    } catch (err) {
+      setSheetWarning(err instanceof Error ? err.message : "Resync failed");
+    } finally {
+      setResyncing(false);
     }
   };
 
@@ -223,21 +263,52 @@ export function JobDetailPage() {
                   )}
                 </Group>
               </Box>
-              <Button
-                onClick={() => saveJob()}
-                loading={saving}
-                color="amber"
-                size="sm"
-                radius="md"
-                style={{ flexShrink: 0 }}
-              >
-                Save job
-              </Button>
+              <Group gap="xs" style={{ flexShrink: 0 }}>
+                <Button
+                  onClick={handleResync}
+                  loading={resyncing}
+                  variant="default"
+                  size="sm"
+                  radius="md"
+                  disabled={saving}
+                >
+                  Resync to Sheet
+                </Button>
+                <Button
+                  onClick={() => saveJob()}
+                  loading={saving}
+                  color="amber"
+                  size="sm"
+                  radius="md"
+                >
+                  Save job
+                </Button>
+              </Group>
             </Group>
             {saveMessage && (
               <Text size="sm" c="dimmed" mt="sm">
                 {saveMessage}
               </Text>
+            )}
+            {sheetWarning && (
+              <Alert
+                color="yellow"
+                mt="sm"
+                withCloseButton
+                onClose={() => setSheetWarning("")}
+              >
+                {sheetWarning.includes("invalid_grant") ? (
+                  <Text size="sm">
+                    Your Google connection has expired, so the sheet tracker did not update.{" "}
+                    <Anchor component={Link} to="/dashboard/profile">
+                      Reconnect Google in Profile
+                    </Anchor>
+                    , then click <strong>Resync to Sheet</strong> to push this change.
+                  </Text>
+                ) : (
+                  sheetWarning
+                )}
+              </Alert>
             )}
           </Box>
 
